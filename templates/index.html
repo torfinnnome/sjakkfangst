@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sjakkfangst - Lichess FIDE Game Fetcher</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .description {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        label {
+            font-weight: 600;
+            color: #555;
+        }
+        input[type="url"] {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        input[type="url"]:focus {
+            outline: none;
+            border-color: #4a90d9;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: #4a90d9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #357abd;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        /* Progress Bar Styles */
+        #progress-container {
+            margin-top: 30px;
+            display: none;
+        }
+        #progress-bar-bg {
+            width: 100%;
+            background-color: #eee;
+            border-radius: 4px;
+            height: 20px;
+            overflow: hidden;
+        }
+        #progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background-color: #4caf50;
+            transition: width 0.3s ease;
+        }
+        #status-text {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+            text-align: center;
+        }
+        #error-text {
+            margin-top: 20px;
+            color: #d32f2f;
+            display: none;
+            padding: 10px;
+            background: #ffebee;
+            border-radius: 4px;
+        }
+
+        .example {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #4a90d9;
+            font-size: 14px;
+            color: #666;
+        }
+        .example code {
+            background-color: #eee;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sjakkfangst</h1>
+        <p class="description">
+            Enter a Lichess FIDE player URL to download all games from that player's broadcast tournaments.
+        </p>
+        
+        <form id="fetch-form">
+            <label for="url">Lichess FIDE Player URL</label>
+            <input 
+                type="url" 
+                id="url" 
+                name="url" 
+                placeholder="https://lichess.org/fide/1503014/MagnusCarlsen"
+                required
+                autofocus
+            >
+            <button type="submit" id="submit-btn">Fetch Games</button>
+        </form>
+
+        <div id="progress-container">
+            <div id="progress-bar-bg">
+                <div id="progress-bar-fill"></div>
+            </div>
+            <div id="status-text">Preparing...</div>
+        </div>
+
+        <div id="error-text"></div>
+
+        <div class="example">
+            <strong>Example URL format:</strong><br>
+            <code>https://lichess.org/fide/1503014/MagnusCarlsen</code>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('fetch-form');
+        const urlInput = document.getElementById('url');
+        const submitBtn = document.getElementById('submit-btn');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const statusText = document.getElementById('status-text');
+        const errorText = document.getElementById('error-text');
+
+        form.onsubmit = function(e) {
+            e.preventDefault();
+            
+            const url = urlInput.value.trim();
+            if (!url) return;
+
+            // Reset UI
+            errorText.style.display = 'none';
+            progressContainer.style.display = 'block';
+            submitBtn.disabled = true;
+            progressBarFill.style.width = '0%';
+            statusText.innerText = 'Fetching tournament list...';
+
+            // Start SSE connection
+            const eventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}`);
+
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+
+                if (data.error) {
+                    showError(data.error);
+                    eventSource.close();
+                    return;
+                }
+
+                if (data.progress !== undefined) {
+                    progressBarFill.style.width = data.progress + '%';
+                }
+
+                if (data.name) {
+                    statusText.innerText = `Fetching: ${data.name}`;
+                }
+
+                if (data.done) {
+                    statusText.innerText = 'Done! Starting download...';
+                    progressBarFill.style.width = '100%';
+                    eventSource.close();
+                    
+                    // Trigger download
+                    window.location.href = `/download/${data.id}`;
+                    
+                    // Re-enable form after a delay
+                    setTimeout(() => {
+                        submitBtn.disabled = false;
+                        progressContainer.style.display = 'none';
+                    }, 2000);
+                }
+            };
+
+            eventSource.onerror = function() {
+                showError('Connection error or server failure.');
+                eventSource.close();
+            };
+        };
+
+        function showError(msg) {
+            errorText.innerText = 'Error: ' + msg;
+            errorText.style.display = 'block';
+            progressContainer.style.display = 'none';
+            submitBtn.disabled = false;
+        }
+    </script>
+</body>
+</html>
