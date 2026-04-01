@@ -198,11 +198,11 @@
                     // Trigger download
                     window.location.href = `/download/${data.id}`;
                     
-                    // Re-enable form after a delay
+                    // Re-enable form after a delay (keep "Done!" message visible for 10 seconds)
                     setTimeout(() => {
                         submitBtn.disabled = false;
                         progressContainer.style.display = 'none';
-                    }, 2000);
+                    }, 10000);
                 }
             };
 
