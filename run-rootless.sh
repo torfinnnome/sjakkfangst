@@ -61,7 +61,8 @@ echo "Press Ctrl+C to stop"
 exec podman run \
     --name "$CONTAINER_NAME" \
     --rm \
-    -p "$HOST_PORT:5000" \
+    --network slirp4netns:allow_host_loopback=true \
+    -p "127.0.0.1:$HOST_PORT:5000" \
     -u 1000:1000 \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
