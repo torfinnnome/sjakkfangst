@@ -8,7 +8,36 @@
 uv pip install -r requirements.txt
 ```
 
-## Usage
+## Running with Podman (Recommended for Security)
+
+For improved security through containerization, run Sjakkfangst in a rootless, hardened container:
+
+```bash
+# Build and run (port 5000)
+./run-rootless.sh
+
+# Use a different port
+HOST_PORT=8080 ./run-rootless.sh
+
+# Adjust resource limits
+MEMORY_LIMIT=256m CPU_LIMIT=0.5 ./run-rootless.sh
+```
+
+Security features:
+- Runs as non-root user
+- All Linux capabilities dropped
+- Read-only root filesystem
+- Resource limits (memory, CPU)
+- Isolated network namespace
+
+To verify security settings:
+```bash
+./verify-security.sh
+```
+
+## Usage (Direct)
+
+If not using Podman, run the Flask application directly:
 
 1. Run the Flask application:
 ```bash
@@ -30,6 +59,9 @@ python app.py
 - `pgn_processor.py` - PGN download and filtering
 - `templates/index.html` - Web interface
 - `tests/` - Unit tests
+- `Containerfile` - Podman/Docker container definition
+- `run-rootless.sh` - Rootless container run script with hardening
+- `verify-security.sh` - Security verification script
 
 ## Testing
 
