@@ -6,6 +6,10 @@ IMAGE_NAME="sjakkfangst:latest"
 HOST_PORT="${HOST_PORT:-5000}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-512m}"
 
+# Cache configuration
+HOST_CACHE_DIR="${HOST_CACHE_DIR:-$PWD/cache}"
+CACHE_TTL_HOURS="${CACHE_TTL_HOURS:-24}"
+
 # Error handler function
 cleanup() {
     if podman container exists "$CONTAINER_NAME" 2>/dev/null; then
@@ -15,6 +19,10 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
+
+# Create cache directory on host with proper permissions
+mkdir -p "$HOST_CACHE_DIR"
+chmod 755 "$HOST_CACHE_DIR"
 
 # Check if port is already in use
 if command -v lsof &> /dev/null; then
@@ -52,6 +60,8 @@ fi
 
 echo "Starting Sjakkfangst container on port $HOST_PORT..."
 echo "  Memory limit: $MEMORY_LIMIT"
+echo "  Cache directory: $HOST_CACHE_DIR"
+echo "  Cache TTL: $CACHE_TTL_HOURS hours"
 echo ""
 echo "Press Ctrl+C to stop"
 
@@ -63,6 +73,9 @@ exec podman run \
     --rm \
     --network slirp4netns:allow_host_loopback=true \
     -p "127.0.0.1:$HOST_PORT:5000" \
+    -v "$HOST_CACHE_DIR:/cache:Z" \
+    -e CACHE_DIR=/cache \
+    -e CACHE_TTL_HOURS="$CACHE_TTL_HOURS" \
     -u 1000:1000 \
     --cap-drop=ALL \
     --security-opt=no-new-privileges \
