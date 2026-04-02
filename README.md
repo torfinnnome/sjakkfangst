@@ -35,6 +35,22 @@ To verify security settings:
 ./verify-security.sh
 ```
 
+## Caching
+
+Sjakkfangst includes a two-level, file-based caching layer to improve performance and reduce load on Lichess.org:
+
+- **Tournament Cache**: Raw PGN data from Lichess broadcasts is cached for 24 hours (default). Completed tournaments are cached indefinitely.
+- **Player Cache**: Filtered games for specific FIDE players are cached for instant subsequent retrieval.
+
+### Cache Configuration
+
+When running with Podman, the cache is persisted on the host in the `./cache` directory. You can configure the caching behavior via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CACHE_TTL_HOURS` | 24 | Expiration time for ongoing tournaments |
+| `HOST_CACHE_DIR` | `./cache` | Host path for persistent storage |
+
 ## Usage (Direct)
 
 If not using Podman, run the Flask application directly:
@@ -57,6 +73,7 @@ python app.py
 - `app.py` - Flask web application entry point
 - `scraper.py` - URL parsing and broadcast fetching
 - `pgn_processor.py` - PGN download and filtering
+- `cache.py` - Disk-based caching with TTL and status detection
 - `templates/index.html` - Web interface
 - `tests/` - Unit tests
 - `Containerfile` - Podman/Docker container definition
