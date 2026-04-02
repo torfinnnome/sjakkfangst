@@ -3,13 +3,15 @@
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 # Configuration from environment variables
 CACHE_DIR = os.environ.get("CACHE_DIR", "/cache")
 CACHE_TTL_HOURS = int(os.environ.get("CACHE_TTL_HOURS", "24"))
+CACHE_COMPLETED_DAYS = int(os.environ.get("CACHE_COMPLETED_DAYS", "5"))
 
 
 def _get_hash(key: str) -> str:
@@ -27,8 +29,68 @@ def _get_pgn_path(subdir: str, hash_key: str) -> Path:
     return Path(CACHE_DIR) / subdir / f"{hash_key}.pgn"
 
 
+def _parse_tournament_end_date(pgn_text: str) -> Optional[datetime]:
+    """Extract the latest game date from PGN text.
+
+    Args:
+        pgn_text: Raw PGN data
+
+    Returns:
+        Latest date found in PGN headers, or None if not found.
+    """
+    # Look for Date headers in format [Date "YYYY.MM.DD"]
+    date_pattern = r'\[Date "(\d{4})\.(\d{2})\.(\d{2})"\]'
+    dates = []
+
+    for match in re.finditer(date_pattern, pgn_text):
+        try:
+            year, month, day = (
+                int(match.group(1)),
+                int(match.group(2)),
+                int(match.group(3)),
+            )
+            dates.append(datetime(year, month, day))
+        except ValueError:
+            continue
+
+    return max(dates) if dates else None
+
+
+def _determine_tournament_status(pgn_text: str) -> Tuple[str, Optional[str]]:
+    """Determine if tournament is completed or ongoing based on game dates.
+
+    Args:
+        pgn_text: Raw PGN data
+
+    Returns:
+        Tuple of (status, end_date_iso). Status is "completed" or "ongoing".
+    """
+    end_date = _parse_tournament_end_date(pgn_text)
+
+    if end_date is None:
+        # No date info - treat as ongoing (safer default)
+        return "ongoing", None
+
+    days_since_end = (datetime.now() - end_date).days
+
+    if days_since_end > CACHE_COMPLETED_DAYS:
+        return "completed", end_date.isoformat()
+    else:
+        return "ongoing", end_date.isoformat()
+
+
 def _is_expired(metadata: dict) -> bool:
-    """Check if cached entry has exceeded TTL."""
+    """Check if cached entry has exceeded TTL.
+
+    Completed tournaments never expire. Ongoing tournaments expire after TTL.
+    """
+    status = metadata.get("status", "ongoing")
+
+    # Completed tournaments are cached indefinitely
+    if status == "completed":
+        return False
+
+    # Ongoing tournaments use TTL
     cached_at = datetime.fromisoformat(metadata["cached_at"])
     ttl = timedelta(hours=CACHE_TTL_HOURS)
     return datetime.utcnow() - cached_at > ttl
@@ -51,6 +113,7 @@ def get_cached_tournament(tournament_id: str) -> Optional[str]:
     Returns:
         Cached PGN text if found and not expired, None otherwise.
         Expired entries are automatically deleted.
+        Completed tournaments never expire.
     """
     hash_key = _get_hash(tournament_id)
     meta_path = _get_metadata_path("tournaments", hash_key)
@@ -71,7 +134,7 @@ def get_cached_tournament(tournament_id: str) -> Optional[str]:
 
 
 def cache_tournament(tournament_id: str, pgn_text: str, url: str = "") -> None:
-    """Cache raw PGN data for a tournament.
+    """Cache raw PGN data for a tournament with automatic status detection.
 
     Args:
         tournament_id: The Lichess tournament ID
@@ -86,11 +149,18 @@ def cache_tournament(tournament_id: str, pgn_text: str, url: str = "") -> None:
         pgn_path.parent.mkdir(parents=True, exist_ok=True)
         pgn_path.write_text(pgn_text)
 
+        # Determine status based on game dates
+        status, end_date = _determine_tournament_status(pgn_text)
+
         metadata = {
             "cached_at": datetime.utcnow().isoformat(),
             "tournament_id": tournament_id,
             "url": url,
+            "status": status,
         }
+        if end_date:
+            metadata["last_game_date"] = end_date
+
         meta_path.write_text(json.dumps(metadata))
     except (OSError, IOError):
         # Fail silently if cache can't be written (e.g., permission denied)

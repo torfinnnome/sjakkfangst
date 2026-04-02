@@ -152,3 +152,112 @@ def test_corrupted_metadata_handling(temp_cache_dir):
     # Should clean up corrupted files
     assert not pgn_path.exists()
     assert not meta_path.exists()
+
+
+def test_parse_tournament_end_date():
+    """Test parsing of latest game date from PGN."""
+    pgn_old = """[Event "Old Tournament"]
+[Date "2024.01.15"]
+1. e4 e5
+
+[Event "Old Tournament"]
+[Date "2024.01.16"]
+1. d4 d5"""
+
+    pgn_recent = """[Event "Recent Tournament"]
+[Date "2024.12.25"]
+1. e4 e5
+
+[Event "Recent Tournament"]
+[Date "2024.12.26"]
+1. d4 d5"""
+
+    pgn_no_date = """[Event "Unknown Date"]
+1. e4 e5"""
+
+    result_old = cache._parse_tournament_end_date(pgn_old)
+    assert result_old == datetime(2024, 1, 16)
+
+    result_recent = cache._parse_tournament_end_date(pgn_recent)
+    assert result_recent == datetime(2024, 12, 26)
+
+    result_no_date = cache._parse_tournament_end_date(pgn_no_date)
+    assert result_no_date is None
+
+
+def test_determine_tournament_status_completed():
+    """Test status detection for completed tournament (> 5 days)."""
+    # Create PGN with date 10 days ago
+    old_date = (datetime.now() - timedelta(days=10)).strftime("%Y.%m.%d")
+    pgn = f'''[Event "Old Tournament"]
+[Date "{old_date}"]
+1. e4 e5'''
+
+    status, end_date = cache._determine_tournament_status(pgn)
+    assert status == "completed"
+    assert end_date is not None
+
+
+def test_determine_tournament_status_ongoing():
+    """Test status detection for ongoing/recent tournament (< 5 days)."""
+    # Create PGN with date 2 days ago
+    recent_date = (datetime.now() - timedelta(days=2)).strftime("%Y.%m.%d")
+    pgn = f'''[Event "Recent Tournament"]
+[Date "{recent_date}"]
+1. e4 e5'''
+
+    status, end_date = cache._determine_tournament_status(pgn)
+    assert status == "ongoing"
+    assert end_date is not None
+
+
+def test_completed_tournament_never_expires(temp_cache_dir):
+    """Test that completed tournaments are cached indefinitely."""
+    tournament_id = "completed-tournament"
+    old_date = (datetime.now() - timedelta(days=30)).strftime("%Y.%m.%d")
+    pgn_data = f'''[Event "Old Tournament"]
+[Date "{old_date}"]
+1. e4 e5'''
+
+    # Cache the tournament
+    cache.cache_tournament(tournament_id, pgn_data)
+
+    # Manually set cached_at to 30 days ago (should not matter for completed tournaments)
+    hash_key = cache._get_hash(tournament_id)
+    meta_path = Path(temp_cache_dir) / "tournaments" / f"{hash_key}.meta"
+    metadata = json.loads(meta_path.read_text())
+    assert metadata["status"] == "completed"
+
+    # Modify cached_at to be very old
+    metadata["cached_at"] = (datetime.utcnow() - timedelta(days=100)).isoformat()
+    meta_path.write_text(json.dumps(metadata))
+
+    # Should still return cached data for completed tournaments
+    result = cache.get_cached_tournament(tournament_id)
+    assert result == pgn_data, "Completed tournaments should never expire"
+
+
+def test_ongoing_tournament_expires(temp_cache_dir):
+    """Test that ongoing tournaments expire after TTL."""
+    tournament_id = "ongoing-tournament"
+    recent_date = (datetime.now() - timedelta(days=2)).strftime("%Y.%m.%d")
+    pgn_data = f'''[Event "Recent Tournament"]
+[Date "{recent_date}"]
+1. e4 e5'''
+
+    # Cache the tournament
+    cache.cache_tournament(tournament_id, pgn_data)
+
+    # Verify it's marked as ongoing
+    hash_key = cache._get_hash(tournament_id)
+    meta_path = Path(temp_cache_dir) / "tournaments" / f"{hash_key}.meta"
+    metadata = json.loads(meta_path.read_text())
+    assert metadata["status"] == "ongoing"
+
+    # Modify cached_at to be expired
+    metadata["cached_at"] = (datetime.utcnow() - timedelta(hours=25)).isoformat()
+    meta_path.write_text(json.dumps(metadata))
+
+    # Should return None for expired ongoing tournaments
+    result = cache.get_cached_tournament(tournament_id)
+    assert result is None, "Ongoing tournaments should expire after TTL"
