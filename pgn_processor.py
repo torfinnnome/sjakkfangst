@@ -6,9 +6,13 @@ import re
 import chess.pgn
 import requests
 
+from cache import get_cached_tournament, cache_tournament
+
 
 def download_broadcast_pgn(broadcast_url: str) -> str:
     """Download PGN data from a Lichess broadcast URL.
+
+    Checks cache first before making HTTP request. Caches successful results.
 
     Args:
         broadcast_url: A URL in the format https://lichess.org/broadcast/tournament-slug/round-slug/id
@@ -18,27 +22,35 @@ def download_broadcast_pgn(broadcast_url: str) -> str:
         Raw PGN text from the broadcast, or empty string on error.
     """
     try:
-        # Fetch the broadcast page to find the actual tournament ID in the JSON data
+        # Fetch the broadcast page to find the actual tournament ID
         page_response = requests.get(broadcast_url, timeout=30)
         page_response.raise_for_status()
 
         # The tournament ID is inside the page-init-data JSON in the HTML
-        # Look for "tour":{"id":"XXXXXX"
         match = re.search(r'"tour":\{"id":"([^"]+)"', page_response.text)
         if match:
             tournament_id = match.group(1)
         else:
-            # Fallback: find the first 8-char ID in the URL path
-            # e.g., /broadcast/tournament-name/round-name/ROUNDID
+            # Fallback: use last path component
             url_parts = broadcast_url.rstrip("/").split("/")
             tournament_id = url_parts[-1]
 
-        # Construct API URL using the tournament ID
-        api_url = f"https://lichess.org/api/broadcast/{tournament_id}.pgn"
+        # Check cache first
+        cached = get_cached_tournament(tournament_id)
+        if cached is not None:
+            return cached
 
+        # Construct API URL and fetch
+        api_url = f"https://lichess.org/api/broadcast/{tournament_id}.pgn"
         response = requests.get(api_url, timeout=30)
         response.raise_for_status()
-        return response.text
+        pgn_text = response.text
+
+        # Cache the result
+        if pgn_text:
+            cache_tournament(tournament_id, pgn_text, broadcast_url)
+
+        return pgn_text
     except requests.RequestException:
         return ""
 
@@ -59,7 +71,7 @@ def filter_games_by_fide(pgn_text: str, fide_id: str, player_name: str = "") -> 
 
     matching_games = []
     pgn_stream = io.StringIO(pgn_text)
-    
+
     # Prepare player name variations for matching
     name_variants = []
     if player_name:
@@ -80,13 +92,13 @@ def filter_games_by_fide(pgn_text: str, fide_id: str, player_name: str = "") -> 
             white_fide = game.headers.get("WhiteFideId", "")
             black_fide = game.headers.get("BlackFideId", "")
 
-            is_match = (white_fide == fide_id or black_fide == fide_id)
+            is_match = white_fide == fide_id or black_fide == fide_id
 
             # 2. Fallback: Check player names if no FIDE ID match
             if not is_match and name_variants:
                 white_name = game.headers.get("White", "").lower()
                 black_name = game.headers.get("Black", "").lower()
-                
+
                 for variant in name_variants:
                     if variant in white_name or variant in black_name:
                         is_match = True

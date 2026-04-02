@@ -78,19 +78,23 @@ def cache_tournament(tournament_id: str, pgn_text: str, url: str = "") -> None:
         pgn_text: Raw PGN data to cache
         url: Optional URL for metadata
     """
-    hash_key = _get_hash(tournament_id)
-    pgn_path = _get_pgn_path("tournaments", hash_key)
-    meta_path = _get_metadata_path("tournaments", hash_key)
+    try:
+        hash_key = _get_hash(tournament_id)
+        pgn_path = _get_pgn_path("tournaments", hash_key)
+        meta_path = _get_metadata_path("tournaments", hash_key)
 
-    pgn_path.parent.mkdir(parents=True, exist_ok=True)
-    pgn_path.write_text(pgn_text)
+        pgn_path.parent.mkdir(parents=True, exist_ok=True)
+        pgn_path.write_text(pgn_text)
 
-    metadata = {
-        "cached_at": datetime.utcnow().isoformat(),
-        "tournament_id": tournament_id,
-        "url": url,
-    }
-    meta_path.write_text(json.dumps(metadata))
+        metadata = {
+            "cached_at": datetime.utcnow().isoformat(),
+            "tournament_id": tournament_id,
+            "url": url,
+        }
+        meta_path.write_text(json.dumps(metadata))
+    except (OSError, IOError):
+        # Fail silently if cache can't be written (e.g., permission denied)
+        pass
 
 
 def get_cached_player(fide_id: str, tournament_id: str) -> Optional[str]:
@@ -131,17 +135,21 @@ def cache_player(fide_id: str, tournament_id: str, pgn_text: str) -> None:
         tournament_id: The Lichess tournament ID
         pgn_text: Filtered PGN data to cache
     """
-    key = f"{fide_id}_{tournament_id}"
-    hash_key = _get_hash(key)
-    pgn_path = _get_pgn_path("players", hash_key)
-    meta_path = _get_metadata_path("players", hash_key)
+    try:
+        key = f"{fide_id}_{tournament_id}"
+        hash_key = _get_hash(key)
+        pgn_path = _get_pgn_path("players", hash_key)
+        meta_path = _get_metadata_path("players", hash_key)
 
-    pgn_path.parent.mkdir(parents=True, exist_ok=True)
-    pgn_path.write_text(pgn_text)
+        pgn_path.parent.mkdir(parents=True, exist_ok=True)
+        pgn_path.write_text(pgn_text)
 
-    metadata = {
-        "cached_at": datetime.utcnow().isoformat(),
-        "fide_id": fide_id,
-        "tournament_id": tournament_id,
-    }
-    meta_path.write_text(json.dumps(metadata))
+        metadata = {
+            "cached_at": datetime.utcnow().isoformat(),
+            "fide_id": fide_id,
+            "tournament_id": tournament_id,
+        }
+        meta_path.write_text(json.dumps(metadata))
+    except (OSError, IOError):
+        # Fail silently if cache can't be written (e.g., permission denied)
+        pass
