@@ -8,6 +8,7 @@ from flask import Flask, render_template, request, send_file, Response
 
 from scraper import parse_fide_url, get_broadcasts
 from pgn_processor import download_broadcast_pgn, filter_games_by_fide
+from cache import get_cached_player, cache_player
 
 app = Flask(__name__)
 
@@ -47,13 +48,13 @@ def fetch_stream():
 
         all_games = []
         processed_tournaments = set()
-        
+
         # Deduplicate broadcasts by tournament slug
         unique_broadcasts = []
         seen_slugs = set()
         for b in broadcasts:
             # Extract tournament slug
-            parts = b['url'].split("/")
+            parts = b["url"].split("/")
             if len(parts) < 5:
                 continue
             slug = parts[4]
@@ -64,23 +65,36 @@ def fetch_stream():
         total = len(unique_broadcasts)
 
         for i, broadcast in enumerate(unique_broadcasts):
-            name = broadcast['name']
+            name = broadcast["name"]
             # Calculate progress: show at least 1% if we have tournaments
             progress = int((i / total) * 100)
             if progress == 0 and total > 0:
                 progress = 1
-            
+
             # Send progress update
             yield f"data: {json.dumps({'progress': progress, 'name': name})}\n\n"
 
-            # Respect Lichess rate limits (3 second delay between tournament requests)
+            # Extract tournament_id from URL
+            url_parts = broadcast["url"].rstrip("/").split("/")
+            tournament_id = url_parts[-1] if len(url_parts) >= 5 else ""
+
+            # Check player cache first
+            player_cached = get_cached_player(fide_id, tournament_id)
+            if player_cached is not None:
+                if player_cached:
+                    all_games.append(player_cached)
+                continue
+
+            # Respect Lichess rate limits (only if actually downloading)
             if i > 0:
                 time.sleep(3)
 
-            pgn_text = download_broadcast_pgn(broadcast['url'])
+            pgn_text = download_broadcast_pgn(broadcast["url"])
             if pgn_text:
                 # Pass player_name as fallback for filtering
                 filtered = filter_games_by_fide(pgn_text, fide_id, player_name)
+                # Cache filtered result for this player
+                cache_player(fide_id, tournament_id, filtered)
                 if filtered:
                     all_games.append(filtered)
 
@@ -93,7 +107,7 @@ def fetch_stream():
         combined_pgn = "\n\n".join(all_games)
         tasks[task_id] = {
             "pgn": combined_pgn,
-            "filename": f"{player_name}_fide_games.pgn"
+            "filename": f"{player_name}_fide_games.pgn",
         }
 
         yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id})}\n\n"
