@@ -49,7 +49,7 @@ cleanup() {
 }
 
 # Create cache directory on host with proper permissions
-mkdir -p "$HOST_CACHE_DIR"
+mkdir -p "$HOST_CACHE_DIR/tournaments" "$HOST_CACHE_DIR/players"
 chmod 755 "$HOST_CACHE_DIR"
 
 # Check if port is already in use

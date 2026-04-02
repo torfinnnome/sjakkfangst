@@ -54,5 +54,14 @@ else
     exit 1
 fi
 
+# Check cache is writable
+if podman exec "$CONTAINER_NAME" touch /cache/.writable 2>/dev/null; then
+    echo "✓ PASS: Cache directory is writable"
+    podman exec "$CONTAINER_NAME" rm /cache/.writable 2>/dev/null
+else
+    echo "✗ FAIL: Cache directory is not writable"
+    exit 1
+fi
+
 echo ""
 echo "=== All security checks passed ==="

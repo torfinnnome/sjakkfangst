@@ -347,7 +347,7 @@ VOLUME ["/cache"]
 
 ### run-rootless.sh Updates
 
-Add cache directory configuration and mounting:
+Add cache directory configuration and mounting. The script also pre-creates the expected subdirectory structure on the host to ensure consistent permissions:
 
 ```bash
 # Configuration
@@ -355,13 +355,14 @@ HOST_CACHE_DIR="${HOST_CACHE_DIR:-$PWD/cache}"
 CACHE_TTL_HOURS="${CACHE_TTL_HOURS:-24}"
 
 # Create cache directory on host with proper permissions
-mkdir -p "$HOST_CACHE_DIR"
+mkdir -p "$HOST_CACHE_DIR/tournaments" "$HOST_CACHE_DIR/players"
 chmod 755 "$HOST_CACHE_DIR"
 
 # Add to podman run command:
     -v "$HOST_CACHE_DIR:/cache:Z" \
     -e CACHE_DIR=/cache \
     -e CACHE_TTL_HOURS="$CACHE_TTL_HOURS" \
+```
 
 # Display cache info on startup
 echo "  Cache directory: $HOST_CACHE_DIR"
@@ -396,6 +397,7 @@ echo "  Cache TTL: $CACHE_TTL_HOURS hours"
    - Cache persists across container restarts
    - Cache directory has correct permissions
    - Environment variables are passed correctly
+   - Run `./verify-security.sh` to confirm the cache directory is writable within the container
 
 ## Error Handling
 
