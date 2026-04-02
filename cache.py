@@ -2,11 +2,16 @@
 
 import hashlib
 import json
+import logging
 import os
 import re
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Optional, Tuple
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
 CACHE_DIR = os.environ.get("CACHE_DIR", "/cache")
@@ -166,9 +171,8 @@ def cache_tournament(tournament_id: str, pgn_text: str, url: str = "") -> None:
             metadata["last_game_date"] = end_date
 
         meta_path.write_text(json.dumps(metadata))
-    except (OSError, IOError):
-        # Fail silently if cache can't be written (e.g., permission denied)
-        pass
+    except (OSError, IOError) as e:
+        logger.error(f"Failed to write to cache: {e}")
 
 
 def get_cached_player(fide_id: str, tournament_id: str) -> Optional[str]:
@@ -224,6 +228,5 @@ def cache_player(fide_id: str, tournament_id: str, pgn_text: str) -> None:
             "tournament_id": tournament_id,
         }
         meta_path.write_text(json.dumps(metadata))
-    except (OSError, IOError):
-        # Fail silently if cache can't be written (e.g., permission denied)
-        pass
+    except (OSError, IOError) as e:
+        logger.error(f"Failed to write to cache: {e}")

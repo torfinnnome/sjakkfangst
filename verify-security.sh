@@ -25,6 +25,12 @@ else
     exit 1
 fi
 
+# Check UID mapping (should be 1000 if using keep-id and host user is 1000)
+# podman unshare id -u returns the host user's UID as mapped in the container
+if [ "$USER_ID" = "1000" ]; then
+    echo "✓ PASS: UID 1000 is correctly mapped"
+fi
+
 # Check capabilities
 CAPS=$(podman top "$CONTAINER_NAME" capeff 2>/dev/null | wc -l)
 if [ "$CAPS" -le 1 ]; then

@@ -105,6 +105,7 @@ if [ "$FOREGROUND" = true ]; then
         --network slirp4netns:allow_host_loopback=true \
         -p "127.0.0.1:$HOST_PORT:5000" \
         -v "$HOST_CACHE_DIR:/cache:Z" \
+        --userns=keep-id \
         -e CACHE_DIR=/cache \
         -e CACHE_TTL_HOURS="$CACHE_TTL_HOURS" \
         -u 1000:1000 \
@@ -129,6 +130,7 @@ else
         --network slirp4netns:allow_host_loopback=true \
         -p "127.0.0.1:$HOST_PORT:5000" \
         -v "$HOST_CACHE_DIR:/cache:Z" \
+        --userns=keep-id \
         -e CACHE_DIR=/cache \
         -e CACHE_TTL_HOURS="$CACHE_TTL_HOURS" \
         -u 1000:1000 \
