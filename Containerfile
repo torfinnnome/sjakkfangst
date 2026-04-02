@@ -36,12 +36,23 @@ RUN adduser -D -u 1000 appuser
 # Set working directory
 WORKDIR /app
 
+# Create cache directory with proper permissions
+RUN mkdir -p /cache/tournaments /cache/players && \
+    chown -R appuser:appuser /cache
+
+# Environment variables for cache configuration
+ENV CACHE_DIR=/cache \
+    CACHE_TTL_HOURS=24
+
 # Copy application code
-COPY --chown=appuser:appuser app.py scraper.py pgn_processor.py ./
+COPY --chown=appuser:appuser app.py scraper.py pgn_processor.py cache.py ./
 COPY --chown=appuser:appuser templates/ ./templates/
 
 # Switch to non-root user
 USER appuser
+
+# Expose cache directory as volume for persistence
+VOLUME ["/cache"]
 
 # Expose Flask port
 EXPOSE 5000
