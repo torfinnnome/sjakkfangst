@@ -78,8 +78,8 @@ class TestGetBroadcasts:
         <html>
         <body>
             <div class="relay-cards">
-                <a href="/broadcast/tata-steel-2024/round-1/abc123">Round 1</a>
-                <a href="/broadcast/tata-steel-2024/round-2/def456">Round 2</a>
+                <a href="/broadcast/tata-steel-2024/round-1/abc123"><h3 class="relay-card__title">Tata Steel 2024</h3></a>
+                <a href="/broadcast/tata-steel-2024/round-2/def456"><h3 class="relay-card__title">Tata Steel 2024</h3></a>
             </div>
         </body>
         </html>
@@ -89,8 +89,8 @@ class TestGetBroadcasts:
         result = get_broadcasts("1503014", "Carlsen_Magnus")
 
         assert result == [
-            "https://lichess.org/broadcast/tata-steel-2024/round-1/abc123",
-            "https://lichess.org/broadcast/tata-steel-2024/round-2/def456",
+            {"url": "https://lichess.org/broadcast/tata-steel-2024/round-1/abc123", "name": "Tata Steel 2024"},
+            {"url": "https://lichess.org/broadcast/tata-steel-2024/round-2/def456", "name": "Tata Steel 2024"},
         ]
         mock_get.assert_called_once_with(
             "https://lichess.org/fide/1503014/Carlsen_Magnus", timeout=30
@@ -115,7 +115,7 @@ class TestGetBroadcasts:
         result = get_broadcasts("1503014", "Carlsen_Magnus")
 
         assert result == [
-            "https://lichess.org/broadcast/norwegian-championship-2025/round-1/xyz"
+            {"url": "https://lichess.org/broadcast/norwegian-championship-2025/round-1/xyz", "name": "Unknown Tournament"}
         ]
 
     @patch("scraper.requests.get")

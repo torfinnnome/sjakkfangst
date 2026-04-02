@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 import pytest
 
@@ -100,7 +100,7 @@ def test_tournament_expiration(temp_cache_dir):
     # Manually modify metadata to be expired
     hash_key = cache._get_hash(tournament_id)
     meta_path = Path(temp_cache_dir) / "tournaments" / f"{hash_key}.meta"
-    old_time = (datetime.utcnow() - timedelta(hours=25)).isoformat()
+    old_time = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
     metadata = json.loads(meta_path.read_text())
     metadata["cached_at"] = old_time
     meta_path.write_text(json.dumps(metadata))
@@ -123,7 +123,7 @@ def test_player_expiration(temp_cache_dir):
     key = f"{fide_id}_{tournament_id}"
     hash_key = cache._get_hash(key)
     meta_path = Path(temp_cache_dir) / "players" / f"{hash_key}.meta"
-    old_time = (datetime.utcnow() - timedelta(hours=25)).isoformat()
+    old_time = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
     metadata = json.loads(meta_path.read_text())
     metadata["cached_at"] = old_time
     meta_path.write_text(json.dumps(metadata))
@@ -176,10 +176,10 @@ def test_parse_tournament_end_date():
 1. e4 e5"""
 
     result_old = cache._parse_tournament_end_date(pgn_old)
-    assert result_old == datetime(2024, 1, 16)
+    assert result_old == datetime(2024, 1, 16, tzinfo=UTC)
 
     result_recent = cache._parse_tournament_end_date(pgn_recent)
-    assert result_recent == datetime(2024, 12, 26)
+    assert result_recent == datetime(2024, 12, 26, tzinfo=UTC)
 
     result_no_date = cache._parse_tournament_end_date(pgn_no_date)
     assert result_no_date is None
@@ -229,7 +229,7 @@ def test_completed_tournament_never_expires(temp_cache_dir):
     assert metadata["status"] == "completed"
 
     # Modify cached_at to be very old
-    metadata["cached_at"] = (datetime.utcnow() - timedelta(days=100)).isoformat()
+    metadata["cached_at"] = (datetime.now(UTC) - timedelta(days=100)).isoformat()
     meta_path.write_text(json.dumps(metadata))
 
     # Should still return cached data for completed tournaments
@@ -255,7 +255,7 @@ def test_ongoing_tournament_expires(temp_cache_dir):
     assert metadata["status"] == "ongoing"
 
     # Modify cached_at to be expired
-    metadata["cached_at"] = (datetime.utcnow() - timedelta(hours=25)).isoformat()
+    metadata["cached_at"] = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
     meta_path.write_text(json.dumps(metadata))
 
     # Should return None for expired ongoing tournaments
