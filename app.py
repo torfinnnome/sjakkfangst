@@ -107,7 +107,7 @@ def fetch_stream():
         combined_pgn = "\n\n".join(all_games)
         tasks[task_id] = {
             "pgn": combined_pgn,
-            "filename": f"{player_name}_fide_games.pgn",
+            "filename": f"{player_name}_fide_games_sjakkfangst.pgn",
         }
 
         yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id})}\n\n"
