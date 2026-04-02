@@ -107,7 +107,17 @@ def filter_games_by_fide(pgn_text: str, fide_id: str, player_name: str = "") -> 
             if is_match:
                 # Export the matching game to PGN string
                 exporter = chess.pgn.StringExporter()
-                matching_games.append(game.accept(exporter))
+                pgn_output = game.accept(exporter)
+                # Add Sjakkfangst comment after headers (before movetext)
+                # Headers end at first blank line; insert comment there
+                lines = pgn_output.split("\n")
+                header_end = 0
+                for i, line in enumerate(lines):
+                    if line.strip() == "":
+                        header_end = i
+                        break
+                lines.insert(header_end + 1, "{Downloaded with Sjakkfangst}")
+                matching_games.append("\n".join(lines))
         except Exception:
             continue
 
