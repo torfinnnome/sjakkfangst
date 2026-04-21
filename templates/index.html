@@ -317,11 +317,11 @@
                         document.body.removeChild(a);
                     }, 100);
                     
-                    // Re-enable form after a delay (keep "Done!" message visible for 10 seconds)
+                    // Re-enable form after a delay (keep "Done!" message visible)
                     setTimeout(() => {
                         submitBtn.disabled = false;
-                        progressContainer.style.display = 'none';
-                    }, 10000);
+                        // Keep progressContainer visible for user review
+                    }, 5000);
                 }
             };
 
