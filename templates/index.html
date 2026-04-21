@@ -302,8 +302,20 @@
 
                     eventSource.close();
                     
-                    // Trigger download
-                    window.location.href = `/download/${data.id}`;
+                    // Trigger download using a hidden link (more robust for Safari)
+                    const downloadUrl = `/download/${data.id}`;
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = downloadUrl;
+                    // The presence of the download attribute helps Safari/Chrome 
+                    // treat it as a file download rather than a navigation
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    // Clean up
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                    }, 100);
                     
                     // Re-enable form after a delay (keep "Done!" message visible for 10 seconds)
                     setTimeout(() => {
