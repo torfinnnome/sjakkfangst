@@ -62,7 +62,7 @@ python app.py
 
 2. Open your browser to `http://localhost:5000`
 
-3. Enter a Lichess FIDE player URL in the format:
+3. Enter a [Lichess FIDE player URL](https://lichess.org/fide) in the format:
    `https://lichess.org/fide/{fide_id}/{player_name}`
    Example: `https://lichess.org/fide/1503014/Carlsen_Magnus`
 
