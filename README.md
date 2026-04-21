@@ -66,7 +66,9 @@ python app.py
    `https://lichess.org/fide/{fide_id}/{player_name}`
    Example: `https://lichess.org/fide/1503014/Carlsen_Magnus`
 
-4. The app will download all broadcast games for that player and return a downloadable PGN file.
+4. The app will download all broadcast games for that player, showing real-time progress for each tournament. You can expand the details to see exactly which tournaments are being processed.
+
+5. Once finished, a PGN file containing all games will be downloaded automatically.
 
 ## Project Structure
 

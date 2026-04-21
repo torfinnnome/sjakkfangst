@@ -97,6 +97,60 @@
             border-radius: 4px;
         }
 
+        #tournament-details {
+            margin-top: 20px;
+            font-size: 13px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #fafafa;
+        }
+        #tournament-details summary {
+            cursor: pointer;
+            color: #666;
+            padding: 8px 12px;
+            font-weight: 600;
+            user-select: none;
+        }
+        #tournament-list {
+            list-style: none;
+            padding: 0 12px 12px 12px;
+            margin: 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .tournament-item {
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #888;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .tournament-item:last-child {
+            border-bottom: none;
+        }
+        .tournament-item.active {
+            color: #333;
+            font-weight: 600;
+        }
+        .tournament-item.done {
+            color: #4caf50;
+        }
+        .cached-label {
+            font-size: 11px;
+            color: #999;
+            font-style: italic;
+            margin-left: auto;
+        }
+        .status-icon {
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
         .example {
             margin-top: 20px;
             padding: 15px;
@@ -138,6 +192,11 @@
                 <div id="progress-bar-fill"></div>
             </div>
             <div id="status-text">Preparing...</div>
+            
+            <details id="tournament-details">
+                <summary>Tournament Progress Details</summary>
+                <ul id="tournament-list"></ul>
+            </details>
         </div>
 
         <div id="error-text"></div>
@@ -156,6 +215,8 @@
         const progressBarFill = document.getElementById('progress-bar-fill');
         const statusText = document.getElementById('status-text');
         const errorText = document.getElementById('error-text');
+        const tournamentList = document.getElementById('tournament-list');
+        const tournamentDetails = document.getElementById('tournament-details');
 
         form.onsubmit = function(e) {
             e.preventDefault();
@@ -169,6 +230,8 @@
             submitBtn.disabled = true;
             progressBarFill.style.width = '0%';
             statusText.innerText = 'Fetching tournament list...';
+            tournamentList.innerHTML = '';
+            tournamentDetails.open = false;
 
             // Start SSE connection
             const eventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}`);
@@ -182,17 +245,61 @@
                     return;
                 }
 
+                if (data.tournaments) {
+                    data.tournaments.forEach((name, index) => {
+                        const li = document.createElement('li');
+                        li.className = 'tournament-item';
+                        li.innerHTML = `<span class="status-icon">○</span> <span class="tournament-name">${name}</span>`;
+                        tournamentList.appendChild(li);
+                    });
+                }
+
                 if (data.progress !== undefined) {
                     progressBarFill.style.width = data.progress + '%';
                 }
 
                 if (data.name) {
-                    statusText.innerText = `Fetching: ${data.name}`;
+                    statusText.innerText = (data.cached ? 'Using cached: ' : 'Fetching: ') + data.name;
+                    
+                    const items = tournamentList.querySelectorAll('.tournament-item');
+                    items.forEach(item => {
+                        const nameSpan = item.querySelector('.tournament-name');
+                        if (nameSpan.innerText === data.name) {
+                            item.classList.add('active');
+                            item.classList.remove('done');
+                            item.querySelector('.status-icon').innerText = '▶';
+                            
+                            // Add cached label if applicable
+                            if (data.cached && !item.querySelector('.cached-label')) {
+                                const cachedSpan = document.createElement('span');
+                                cachedSpan.className = 'cached-label';
+                                cachedSpan.innerText = '(cached)';
+                                item.appendChild(cachedSpan);
+                            }
+                            
+                            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        } else if (item.classList.contains('active')) {
+                            item.classList.remove('active');
+                            item.classList.add('done');
+                            item.querySelector('.status-icon').innerText = '✓';
+                        }
+                    });
                 }
 
                 if (data.done) {
                     statusText.innerText = 'Done! Starting download...';
                     progressBarFill.style.width = '100%';
+                    
+                    // Mark all remaining items as done
+                    const items = tournamentList.querySelectorAll('.tournament-item');
+                    items.forEach(item => {
+                        if (item.classList.contains('active')) {
+                            item.classList.remove('active');
+                        }
+                        item.classList.add('done');
+                        item.querySelector('.status-icon').innerText = '✓';
+                    });
+
                     eventSource.close();
                     
                     // Trigger download

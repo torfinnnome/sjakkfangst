@@ -64,6 +64,10 @@ def fetch_stream():
 
         total = len(unique_broadcasts)
 
+        # Send list of all tournament names to the client
+        tournament_names = [b["name"] for b in unique_broadcasts]
+        yield f"data: {json.dumps({'tournaments': tournament_names})}\n\n"
+
         for i, broadcast in enumerate(unique_broadcasts):
             name = broadcast["name"]
             # Calculate progress: show at least 1% if we have tournaments
@@ -71,16 +75,18 @@ def fetch_stream():
             if progress == 0 and total > 0:
                 progress = 1
 
-            # Send progress update
-            yield f"data: {json.dumps({'progress': progress, 'name': name})}\n\n"
-
             # Extract tournament_id from URL
             url_parts = broadcast["url"].rstrip("/").split("/")
             tournament_id = url_parts[-1] if len(url_parts) >= 5 else ""
 
             # Check player cache first
             player_cached = get_cached_player(fide_id, tournament_id)
-            if player_cached is not None:
+            is_cached = player_cached is not None
+
+            # Send progress update with cached info
+            yield f"data: {json.dumps({'progress': progress, 'name': name, 'cached': is_cached})}\n\n"
+
+            if is_cached:
                 if player_cached:
                     all_games.append(player_cached)
                 continue
