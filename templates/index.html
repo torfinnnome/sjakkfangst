@@ -251,11 +251,18 @@
         const tournamentList = document.getElementById('tournament-list');
         const tournamentDetails = document.getElementById('tournament-details');
 
+        let currentEventSource = null;
+
         form.onsubmit = function(e) {
             e.preventDefault();
             
             const url = urlInput.value.trim();
             if (!url) return;
+
+            // Close any existing connection
+            if (currentEventSource) {
+                currentEventSource.close();
+            }
 
             // Reset UI
             errorText.style.display = 'none';
@@ -267,14 +274,15 @@
             tournamentDetails.open = false;
 
             // Start SSE connection
-            const eventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}`);
+            currentEventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}`);
 
-            eventSource.onmessage = function(event) {
+            currentEventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
 
                 if (data.error) {
                     showError(data.error);
-                    eventSource.close();
+                    currentEventSource.close();
+                    currentEventSource = null;
                     return;
                 }
 
@@ -333,7 +341,8 @@
                         item.querySelector('.status-icon').innerText = '✓';
                     });
 
-                    eventSource.close();
+                    currentEventSource.close();
+                    currentEventSource = null;
                     
                     // Trigger download using a hidden link (more robust for Safari)
                     const downloadUrl = `/download/${data.id}`;
@@ -358,9 +367,12 @@
                 }
             };
 
-            eventSource.onerror = function() {
+            currentEventSource.onerror = function() {
                 showError('Connection error or server failure.');
-                eventSource.close();
+                if (currentEventSource) {
+                    currentEventSource.close();
+                    currentEventSource = null;
+                }
             };
         };
 
