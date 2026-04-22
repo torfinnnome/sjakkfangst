@@ -84,7 +84,7 @@ def fetch_stream():
             is_cached = player_cached is not None
 
             # Send progress update with cached info
-            yield f"data: {json.dumps({'progress': progress, 'name': name, 'cached': is_cached})}\n\n"
+            yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': is_cached})}\n\n"
 
             if is_cached:
                 if player_cached:
@@ -118,7 +118,12 @@ def fetch_stream():
 
         yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id})}\n\n"
 
-    return Response(generate(), mimetype="text/event-stream")
+    response = Response(generate(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Accel-Buffering"] = "no"  # Disable buffering for Nginx/proxies
+    return response
 
 
 @app.route("/download/<task_id>")

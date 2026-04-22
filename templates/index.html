@@ -271,10 +271,10 @@
             progressBarFill.style.width = '0%';
             statusText.innerText = 'Fetching tournament list...';
             tournamentList.innerHTML = '';
-            tournamentDetails.open = false;
+            tournamentDetails.open = true;
 
-            // Start SSE connection
-            currentEventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}`);
+            // Start SSE connection with cache-buster
+            currentEventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}&t=${Date.now()}`);
 
             currentEventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
@@ -299,13 +299,12 @@
                     progressBarFill.style.width = data.progress + '%';
                 }
 
-                if (data.name) {
+                if (data.index !== undefined) {
                     statusText.innerText = (data.cached ? 'Using cached: ' : 'Fetching: ') + data.name;
                     
                     const items = tournamentList.querySelectorAll('.tournament-item');
-                    items.forEach(item => {
-                        const nameSpan = item.querySelector('.tournament-name');
-                        if (nameSpan.innerText === data.name) {
+                    items.forEach((item, idx) => {
+                        if (idx === data.index) {
                             item.classList.add('active');
                             item.classList.remove('done');
                             item.querySelector('.status-icon').innerText = '▶';
