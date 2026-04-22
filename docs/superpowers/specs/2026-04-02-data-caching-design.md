@@ -313,8 +313,14 @@ from cache import get_cached_player, cache_player, get_cached_tournament
 
 # Check player cache first
 player_cached = get_cached_player(fide_id, tournament_id)
-if player_cached is not None:
-    all_games.append(player_cached)
+is_cached = player_cached is not None
+
+# Send progress update with cached info
+yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': is_cached})}\n\n"
+
+if is_cached:
+    if player_cached:
+        all_games.append(player_cached)
     continue
 
 # Not in player cache - get tournament data

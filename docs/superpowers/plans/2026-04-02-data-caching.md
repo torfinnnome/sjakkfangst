@@ -609,15 +609,18 @@ def fetch_stream():
             if progress == 0 and total > 0:
                 progress = 1
             
-            yield f"data: {json.dumps({'progress': progress, 'name': name})}\n\n"
-
-            # Extract tournament_id from URL or will be determined by download_broadcast_pgn
+            # Extract tournament_id from URL
             url_parts = broadcast['url'].rstrip("/").split("/")
             tournament_id = url_parts[-1] if len(url_parts) >= 5 else ""
 
             # Check player cache first
             player_cached = get_cached_player(fide_id, tournament_id)
-            if player_cached is not None:
+            is_cached = player_cached is not None
+
+            # Send progress update with cached info
+            yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': is_cached})}\n\n"
+
+            if is_cached:
                 if player_cached:
                     all_games.append(player_cached)
                 continue
@@ -644,12 +647,17 @@ def fetch_stream():
         combined_pgn = "\n\n".join(all_games)
         tasks[task_id] = {
             "pgn": combined_pgn,
-            "filename": f"{player_name}_fide_games.pgn"
+            "filename": f"{player_name}_fide_games_sjakkfangst.pgn"
         }
 
         yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id})}\n\n"
 
-    return Response(generate(), mimetype="text/event-stream")
+    response = Response(generate(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Accel-Buffering"] = "no"  # Disable buffering for Nginx/proxies
+    return response
 
 
 @app.route("/download/<task_id>")
