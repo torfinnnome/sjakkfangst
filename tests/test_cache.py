@@ -261,3 +261,43 @@ def test_ongoing_tournament_expires(temp_cache_dir):
     # Should return None for expired ongoing tournaments
     result = cache.get_cached_tournament(tournament_id)
     assert result is None, "Ongoing tournaments should expire after TTL"
+
+
+def test_ongoing_to_completed_transition_on_read(temp_cache_dir):
+    """Test that a tournament cached as 'ongoing' gets updated to 'completed' on read.
+
+    This is the key fix: when a tournament was cached while ongoing, and the PGN's
+    last game date has since crossed the 5-day threshold, the next read should
+    re-evaluate the status and update metadata to 'completed' (infinite TTL).
+    """
+    tournament_id = "transition-tournament"
+    # PGN has a date >5 days ago → will be detected as completed
+    old_date = (datetime.now() - timedelta(days=10)).strftime("%Y.%m.%d")
+    pgn_data = f'''[Event "Finished Tournament"]
+[Date "{old_date}"]
+1. e4 e5'''
+
+    # Manually create cache with "ongoing" status (simulating stale metadata)
+    hash_key = cache._get_hash(tournament_id)
+    pgn_path = Path(temp_cache_dir) / "tournaments" / f"{hash_key}.pgn"
+    meta_path = Path(temp_cache_dir) / "tournaments" / f"{hash_key}.meta"
+
+    pgn_path.parent.mkdir(parents=True, exist_ok=True)
+    pgn_path.write_text(pgn_data)
+
+    # Write metadata as "ongoing" with old cached_at (would normally expire)
+    metadata = {
+        "cached_at": (datetime.now(UTC) - timedelta(days=30)).isoformat(),
+        "tournament_id": tournament_id,
+        "url": "",
+        "status": "ongoing",
+    }
+    meta_path.write_text(json.dumps(metadata))
+
+    # Read should re-evaluate status from PGN, update to "completed", and NOT expire
+    result = cache.get_cached_tournament(tournament_id)
+    assert result == pgn_data, "Completed tournament should not expire"
+
+    # Verify metadata was updated
+    updated_metadata = json.loads(meta_path.read_text())
+    assert updated_metadata["status"] == "completed", "Status should be updated to completed"

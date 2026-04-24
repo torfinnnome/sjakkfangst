@@ -116,6 +116,9 @@ def _cleanup_expired(subdir: str, hash_key: str) -> None:
 def get_cached_tournament(tournament_id: str) -> Optional[str]:
     """Get cached raw PGN for a tournament.
 
+    Re-evaluates tournament status on each read so that ongoing tournaments
+    that have since finished are updated to "completed" (infinite TTL).
+
     Args:
         tournament_id: The Lichess tournament ID
 
@@ -133,10 +136,18 @@ def get_cached_tournament(tournament_id: str) -> Optional[str]:
 
     try:
         metadata = json.loads(meta_path.read_text())
+        pgn_text = pgn_path.read_text()
+
+        # Re-evaluate status from the PGN to catch transitions
+        current_status, _ = _determine_tournament_status(pgn_text)
+        if metadata.get("status") != current_status:
+            metadata["status"] = current_status
+            meta_path.write_text(json.dumps(metadata))
+
         if _is_expired(metadata):
             _cleanup_expired("tournaments", hash_key)
             return None
-        return pgn_path.read_text()
+        return pgn_text
     except (json.JSONDecodeError, IOError):
         _cleanup_expired("tournaments", hash_key)
         return None
