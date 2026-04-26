@@ -216,13 +216,16 @@ def get_cached_player(fide_id: str, tournament_id: str) -> Optional[str]:
         return None
 
 
-def cache_player(fide_id: str, tournament_id: str, pgn_text: str) -> None:
+def cache_player(fide_id: str, tournament_id: str, pgn_text: str, status: Optional[str] = None) -> None:
     """Cache filtered PGN for a player-tournament combination.
 
     Args:
         fide_id: The FIDE ID of the player
         tournament_id: The Lichess tournament ID
         pgn_text: Filtered PGN data to cache
+        status: Tournament status ("completed" or "ongoing").
+                 If not given, auto-detected from PGN date headers.
+                 Completed tournaments are cached indefinitely.
     """
     try:
         key = f"{fide_id}_{tournament_id}"
@@ -233,10 +236,14 @@ def cache_player(fide_id: str, tournament_id: str, pgn_text: str) -> None:
         pgn_path.parent.mkdir(parents=True, exist_ok=True)
         pgn_path.write_text(pgn_text)
 
+        if status is None:
+            status, _ = _determine_tournament_status(pgn_text)
+
         metadata = {
             "cached_at": datetime.now(timezone.utc).isoformat(),
             "fide_id": fide_id,
             "tournament_id": tournament_id,
+            "status": status,
         }
         meta_path.write_text(json.dumps(metadata))
     except (OSError, IOError) as e:

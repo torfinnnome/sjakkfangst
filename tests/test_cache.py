@@ -301,3 +301,62 @@ def test_ongoing_to_completed_transition_on_read(temp_cache_dir):
     # Verify metadata was updated
     updated_metadata = json.loads(meta_path.read_text())
     assert updated_metadata["status"] == "completed", "Status should be updated to completed"
+
+
+def test_completed_player_cache_never_expires(temp_cache_dir):
+    """Test that a player cache entry for a completed tournament never expires."""
+    fide_id = "1503014"
+    tournament_id = "finished-tournament"
+    old_date = (datetime.now() - timedelta(days=10)).strftime("%Y.%m.%d")
+    pgn_data = f'''[Event "Finished"]
+[Date "{old_date}"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1503014"]
+
+1. e4 e5 1-0'''
+
+    cache.cache_player(fide_id, tournament_id, pgn_data)
+
+    hash_key = cache._get_hash(f"{fide_id}_{tournament_id}")
+    meta_path = Path(temp_cache_dir) / "players" / f"{hash_key}.meta"
+    metadata = json.loads(meta_path.read_text())
+
+    assert metadata["status"] == "completed"
+
+    # Modify cached_at to be very old — should still return cached data
+    metadata["cached_at"] = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+    meta_path.write_text(json.dumps(metadata))
+
+    result = cache.get_cached_player(fide_id, tournament_id)
+    assert result == pgn_data, "Completed player cache should never expire"
+
+
+def test_ongoing_player_cache_expires(temp_cache_dir):
+    """Test that a player cache entry for an ongoing tournament expires after TTL."""
+    fide_id = "1503014"
+    tournament_id = "ongoing-tournament"
+    recent_date = datetime.now().strftime("%Y.%m.%d")
+    pgn_data = f'''[Event "Ongoing"]
+[Date "{recent_date}"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1503014"]
+
+1. e4 e5 1-0'''
+
+    cache.cache_player(fide_id, tournament_id, pgn_data)
+
+    hash_key = cache._get_hash(f"{fide_id}_{tournament_id}")
+    meta_path = Path(temp_cache_dir) / "players" / f"{hash_key}.meta"
+    metadata = json.loads(meta_path.read_text())
+
+    assert metadata["status"] == "ongoing"
+
+    # Should be readable immediately
+    assert cache.get_cached_player(fide_id, tournament_id) == pgn_data
+
+    # Modify cached_at to be expired
+    metadata["cached_at"] = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+    meta_path.write_text(json.dumps(metadata))
+
+    result = cache.get_cached_player(fide_id, tournament_id)
+    assert result is None, "Ongoing player cache should expire after TTL"
