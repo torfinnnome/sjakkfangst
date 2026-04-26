@@ -45,7 +45,7 @@ ENV CACHE_DIR=/cache \
     CACHE_TTL_HOURS=24
 
 # Copy application code
-COPY --chown=appuser:appuser app.py scraper.py pgn_processor.py cache.py ./
+COPY --chown=appuser:appuser app.py scraper.py pgn_processor.py cache.py rate_limit.py ./
 COPY --chown=appuser:appuser templates/ ./templates/
 
 # Switch to non-root user
