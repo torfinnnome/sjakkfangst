@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import time
 import uuid
 from flask import Flask, render_template, request, send_file, Response
@@ -41,8 +42,8 @@ def fetch_stream():
 
     try:
         player_info = parse_fide_url(url)
-    except ValueError as e:
-        return f"Error: {e}", 400
+    except ValueError:
+        return "Error: Invalid FIDE URL", 400
 
     fide_id = player_info["fide_id"]
     player_name = player_info["player_name"]
@@ -164,4 +165,4 @@ def download(task_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
