@@ -7,7 +7,7 @@ import uuid
 from flask import Flask, render_template, request, send_file, Response
 
 from scraper import parse_fide_url, get_broadcasts
-from pgn_processor import download_broadcast_pgn, filter_games_by_fide
+from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
 from cache import get_cached_player, cache_player
 
 app = Flask(__name__)
@@ -116,7 +116,10 @@ def fetch_stream():
             "filename": f"{player_name}_fide_games_sjakkfangst.pgn",
         }
 
-        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id})}\n\n"
+        # Collect opening stats for the player
+        opening_stats = collect_opening_stats(combined_pgn, fide_id)
+
+        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': opening_stats})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
