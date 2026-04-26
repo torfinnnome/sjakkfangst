@@ -1,6 +1,6 @@
 # Sjakkfangst
 
-**Sjakkfangst** is a Flask web application to fetch chess games for FIDE players from Lichess broadcasts.
+**Sjakkfangst** (Norwegian for "Chess Catch" — a chess game hunter) is a Flask web application to fetch chess games for FIDE players from Lichess broadcasts.
 
 ## Installation
 
