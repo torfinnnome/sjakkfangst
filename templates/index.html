@@ -151,6 +151,76 @@
             font-size: 14px;
         }
 
+        /* Stats Section Styles */
+        #stats-container {
+            margin-top: 20px;
+            display: none;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #fafafa;
+        }
+        #stats-container summary {
+            cursor: pointer;
+            color: #333;
+            padding: 10px 12px;
+            font-weight: 600;
+            user-select: none;
+        }
+        #stats-overview {
+            padding: 10px 12px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            font-size: 14px;
+            border-bottom: 1px solid #eee;
+            background: #f0f0f0;
+        }
+        #stats-overview span {
+            font-weight: 600;
+        }
+        #stats-table-wrap {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        #stats-table th {
+            position: sticky;
+            top: 0;
+            background: #f0f0f0;
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #ddd;
+        }
+        #stats-table td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        #stats-table tr:hover {
+            background: #f5f5f5;
+        }
+        #stats-table .num {
+            text-align: center;
+        }
+        #stats-table .win {
+            color: #2e7d32;
+        }
+        #stats-table .loss {
+            color: #c62828;
+        }
+        #stats-table .draw {
+            color: #666;
+        }
+        #stats-table .eco-cell {
+            color: #999;
+            font-size: 11px;
+        }
+
         .example {
             margin-top: 20px;
             padding: 15px;
@@ -216,6 +286,28 @@
                 <div id="progress-bar-fill"></div>
             </div>
             <div id="status-text">Preparing...</div>
+
+            <details id="stats-container">
+                <summary>Opening Statistics</summary>
+                <div id="stats-overview"></div>
+                <div id="stats-table-wrap">
+                    <table id="stats-table">
+                        <thead>
+                            <tr>
+                                <th>Opening</th>
+                                <th class="num">Games</th>
+                                <th class="num win">W</th>
+                                <th class="num draw">D</th>
+                                <th class="num loss">L</th>
+                                <th class="num">Win%</th>
+                                <th class="num">Avg Elo</th>
+                                <th class="eco-cell">ECO</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </details>
             
             <details id="tournament-details">
                 <summary>Tournament Progress Details</summary>
@@ -250,6 +342,9 @@
         const errorText = document.getElementById('error-text');
         const tournamentList = document.getElementById('tournament-list');
         const tournamentDetails = document.getElementById('tournament-details');
+        const statsContainer = document.getElementById('stats-container');
+        const statsOverview = document.getElementById('stats-overview');
+        const statsTableBody = document.querySelector('#stats-table tbody');
 
         let currentEventSource = null;
 
@@ -272,6 +367,9 @@
             statusText.innerText = 'Fetching tournament list...';
             tournamentList.innerHTML = '';
             tournamentDetails.open = true;
+            statsContainer.style.display = 'none';
+            statsContainer.open = false;
+            statsTableBody.innerHTML = '';
 
             // Start SSE connection with cache-buster
             currentEventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}&t=${Date.now()}`);
@@ -329,7 +427,13 @@
                 if (data.done) {
                     statusText.innerText = 'Done! Starting download...';
                     progressBarFill.style.width = '100%';
-                    
+
+                    // Render opening stats
+                    if (data.stats && data.stats.length > 0) {
+                        const playerName = urlInput.value.split('/').pop();
+                        renderStats(data.stats, playerName);
+                    }
+
                     // Mark all remaining items as done
                     const items = tournamentList.querySelectorAll('.tournament-item');
                     items.forEach(item => {
@@ -374,6 +478,41 @@
                 }
             };
         };
+
+        function renderStats(stats, playerName) {
+            const total = stats.reduce((sum, s) => sum + s.games, 0);
+            const wins = stats.reduce((sum, s) => sum + s.wins, 0);
+            const draws = stats.reduce((sum, s) => sum + s.draws, 0);
+            const losses = stats.reduce((sum, s) => sum + s.losses, 0);
+            const winPct = Math.round(wins / total * 100);
+
+            statsContainer.querySelector('summary').innerText = `Opening Statistics — ${decodeURIComponent(playerName)}`;
+
+            statsOverview.innerHTML =
+                `<span>${total} games</span> ` +
+                `<span class="win">W:${wins}</span> ` +
+                `<span class="draw">D:${draws}</span> ` +
+                `<span class="loss">L:${losses}</span> ` +
+                `<span>${winPct}%</span>`;
+
+            statsTableBody.innerHTML = '';
+            stats.forEach(s => {
+                const tr = document.createElement('tr');
+                tr.innerHTML =
+                    `<td>${s.opening}</td>` +
+                    `<td class="num">${s.games}</td>` +
+                    `<td class="num win">${s.wins}</td>` +
+                    `<td class="num draw">${s.draws}</td>` +
+                    `<td class="num loss">${s.losses}</td>` +
+                    `<td class="num">${s.win_pct}%</td>` +
+                    `<td class="num">${s.avg_elo || '-'}</td>` +
+                    `<td class="eco-cell">${s.eco || '-'}</td>`;
+                statsTableBody.appendChild(tr);
+            });
+
+            statsContainer.style.display = 'block';
+            statsContainer.open = true;
+        }
 
         function showError(msg) {
             errorText.innerText = 'Error: ' + msg;
