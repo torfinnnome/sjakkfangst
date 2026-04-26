@@ -196,6 +196,19 @@
             font-weight: 600;
             color: #555;
             border-bottom: 2px solid #ddd;
+            cursor: pointer;
+            user-select: none;
+        }
+        #stats-table th:hover {
+            background: #e0e0e0;
+        }
+        #stats-table th.sort-asc::after {
+            content: ' ▲';
+            font-size: 10px;
+        }
+        #stats-table th.sort-desc::after {
+            content: ' ▼';
+            font-size: 10px;
         }
         #stats-table td {
             padding: 6px 10px;
@@ -366,6 +379,9 @@
         const downloadBtn = document.getElementById('download-btn');
 
         let currentEventSource = null;
+        let currentStats = [];
+        let statsSortCol = null;
+        let statsSortDir = 'desc';
 
         form.onsubmit = function(e) {
             e.preventDefault();
@@ -486,6 +502,10 @@
         };
 
         function renderStats(stats, playerName) {
+            currentStats = stats;
+            statsSortCol = null;
+            statsSortDir = 'desc';
+
             const total = stats.reduce((sum, s) => sum + s.games, 0);
             const wins = stats.reduce((sum, s) => sum + s.wins, 0);
             const draws = stats.reduce((sum, s) => sum + s.draws, 0);
@@ -501,8 +521,16 @@
                 `<span class="loss">L:${losses}</span> ` +
                 `<span>${winPct}%</span>`;
 
+            renderStatsRows(currentStats);
+            wireSortHeaders();
+
+            statsContainer.style.display = 'block';
+            statsContainer.open = true;
+        }
+
+        function renderStatsRows(data) {
             statsTableBody.innerHTML = '';
-            stats.forEach(s => {
+            data.forEach(s => {
                 const tr = document.createElement('tr');
                 tr.innerHTML =
                     `<td>${s.opening}</td>` +
@@ -515,9 +543,59 @@
                     `<td class="eco-cell">${s.eco || '-'}</td>`;
                 statsTableBody.appendChild(tr);
             });
+        }
 
-            statsContainer.style.display = 'block';
-            statsContainer.open = true;
+        function wireSortHeaders() {
+            const headers = document.querySelectorAll('#stats-table thead th');
+            headers.forEach((th, colIndex) => {
+                th.onclick = () => sortStatsBy(colIndex);
+            });
+        }
+
+        function sortStatsBy(colIndex) {
+            const headers = document.querySelectorAll('#stats-table thead th');
+            const cols = [
+                { key: 'opening', numeric: false },
+                { key: 'games', numeric: true },
+                { key: 'wins', numeric: true },
+                { key: 'draws', numeric: true },
+                { key: 'losses', numeric: true },
+                { key: 'win_pct', numeric: true },
+                { key: 'avg_elo', numeric: true },
+                { key: 'eco', numeric: false },
+            ];
+
+            if (statsSortCol === colIndex) {
+                statsSortDir = statsSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                statsSortCol = colIndex;
+                statsSortDir = 'desc';
+            }
+
+            headers.forEach((th, i) => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                if (i === statsSortCol) {
+                    th.classList.add(statsSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+                }
+            });
+
+            const col = cols[colIndex];
+            currentStats.sort((a, b) => {
+                let va = a[col.key];
+                let vb = b[col.key];
+                if (va == null) va = col.numeric ? -Infinity : '';
+                if (vb == null) vb = col.numeric ? -Infinity : '';
+                if (col.numeric) {
+                    return statsSortDir === 'asc' ? va - vb : vb - va;
+                }
+                va = String(va).toLowerCase();
+                vb = String(vb).toLowerCase();
+                if (va < vb) return statsSortDir === 'asc' ? -1 : 1;
+                if (va > vb) return statsSortDir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            renderStatsRows(currentStats);
         }
 
         function showError(msg) {
