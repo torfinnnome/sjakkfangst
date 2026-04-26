@@ -677,14 +677,12 @@ def collect_opening_stats(pgn_text, fide_id):
             else:
                 outcome = "D"
 
-        # Get opening name: prefer Opening header, fallback to ECO lookup
-        opening = headers.get("Opening", "")
+        # Get opening name: always use ECO lookup, ignore Lichess Opening header
         eco_code = headers.get("ECO", "")
-        if not opening and eco_code:
+        if eco_code:
             opening = ECO_OPENINGS.get(eco_code, f"ECO {eco_code}")
-
-        if not opening:
-            opening = "Unknown"
+        else:
+            opening = headers.get("Opening", "Unknown")
 
         # Get opponent Elo
         opponent_elo = None

@@ -247,7 +247,7 @@ class TestCollectOpeningStats:
 
         assert len(stats) == 1
         entry = stats[0]
-        assert entry["opening"] == "Ruy Lopez"
+        assert entry["opening"] == "Ruy Lopez: Berlin Defense"
         assert entry["eco"] == "C65"
         assert entry["games"] == 3
         assert entry["wins"] == 1
@@ -284,7 +284,7 @@ class TestCollectOpeningStats:
         assert entry["avg_elo"] == 2700
 
     def test_eco_fallback_when_opening_missing(self):
-        """Test that ECO code is used as fallback when Opening header is missing."""
+        """Test that ECO lookup is used when Opening header is missing."""
         pgn_text = """[Event "Tournament"]
 [Date "2024.03.01"]
 [White "Carlsen"]
@@ -357,8 +357,8 @@ class TestCollectOpeningStats:
         assert len(stats) == 2
         # Sorted by games descending; both have 1 game, so order depends on insertion
         openings = {s["opening"] for s in stats}
-        assert "Ruy Lopez" in openings
-        assert "Queen's Gambit Declined" in openings
+        assert "Ruy Lopez: Berlin Defense" in openings
+        assert "Queen's Gambit Declined: Been-Koomen Variation" in openings
 
     def test_sorted_by_game_count_descending(self):
         """Test that results are sorted by game count descending."""
@@ -421,9 +421,9 @@ class TestCollectOpeningStats:
         stats = collect_opening_stats(pgn_text, "1503014")
 
         assert len(stats) == 2
-        assert stats[0]["opening"] == "Greater Opening"
+        assert stats[0]["opening"] == "Ruy Lopez: Berlin Defense"
         assert stats[0]["games"] == 3
-        assert stats[1]["opening"] == "Lesser Opening"
+        assert stats[1]["opening"] == "Amar Opening"
         assert stats[1]["games"] == 1
 
     def test_non_matching_games_ignored(self):
@@ -459,7 +459,7 @@ class TestCollectOpeningStats:
         stats = collect_opening_stats(pgn_text, "1503014")
 
         assert len(stats) == 1
-        assert stats[0]["opening"] == "Ruy Lopez"
+        assert stats[0]["opening"] == "Ruy Lopez: Berlin Defense"
         assert stats[0]["games"] == 1
 
     def test_draw_outcome_handling(self):
