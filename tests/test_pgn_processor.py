@@ -3,7 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from pgn_processor import download_broadcast_pgn, filter_games_by_fide
+from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
 
 
 class TestDownloadBroadcastPgn:
@@ -190,3 +190,331 @@ move1 move2 move3
         assert '[Event "Good Game"]' in result
         assert '[Event "Another Good Game"]' in result
         # Malformed content should not cause crash
+
+class TestCollectOpeningStats:
+    """Tests for collect_opening_stats function."""
+
+    def test_empty_pgn_returns_empty_list(self):
+        """Test that empty PGN returns empty list."""
+        assert collect_opening_stats("", "1503014") == []
+        assert collect_opening_stats(None, "1503014") == []
+
+    def test_basic_stats_collection_as_white(self):
+        """Test basic stats collection for player as White."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "2222222"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Ruy Lopez"]
+[ECO "C65"]
+
+1. e4 e5 1-0
+
+[Event "Tournament"]
+[Date "2024.03.02"]
+[White "Carlsen"]
+[Black "Opponent2"]
+[Result "1/2-1/2"]
+[WhiteFideId "1503014"]
+[BlackFideId "3333333"]
+[WhiteElo "2800"]
+[BlackElo "2650"]
+[Opening "Ruy Lopez"]
+[ECO "C65"]
+
+1. e4 e5 1/2-1/2
+
+[Event "Tournament"]
+[Date "2024.03.03"]
+[White "Carlsen"]
+[Black "Opponent3"]
+[Result "0-1"]
+[WhiteFideId "1503014"]
+[BlackFideId "4444444"]
+[WhiteElo "2800"]
+[BlackElo "2750"]
+[Opening "Ruy Lopez"]
+[ECO "C65"]
+
+1. e4 e5 0-1
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 1
+        entry = stats[0]
+        assert entry["opening"] == "Ruy Lopez"
+        assert entry["eco"] == "C65"
+        assert entry["games"] == 3
+        assert entry["wins"] == 1
+        assert entry["draws"] == 1
+        assert entry["losses"] == 1
+        assert entry["win_pct"] == 33
+        assert entry["avg_elo"] == 2700
+        assert entry["date_from"] == "2024.03.01"
+        assert entry["date_to"] == "2024.03.03"
+
+    def test_basic_stats_collection_as_black(self):
+        """Test basic stats collection for player as Black."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Opponent"]
+[Black "Carlsen"]
+[Result "0-1"]
+[WhiteFideId "2222222"]
+[BlackFideId "1503014"]
+[WhiteElo "2700"]
+[BlackElo "2800"]
+[Opening "Sicilian Defense"]
+[ECO "B20"]
+
+1. e4 c5 0-1
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 1
+        entry = stats[0]
+        assert entry["opening"] == "Sicilian Defense"
+        assert entry["wins"] == 1
+        assert entry["losses"] == 0
+        assert entry["avg_elo"] == 2700
+
+    def test_eco_fallback_when_opening_missing(self):
+        """Test that ECO code is used as fallback when Opening header is missing."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "2222222"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[ECO "A00"]
+
+1. a3 a6 1-0
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 1
+        assert stats[0]["eco"] == "A00"
+        assert "Amar" in stats[0]["opening"]
+
+    def test_unknown_opening_when_no_headers(self):
+        """Test that opening defaults to Unknown when no Opening/ECO headers."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "2222222"]
+
+1. e4 e5 1-0
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 1
+        assert stats[0]["opening"] == "Unknown"
+        assert stats[0]["eco"] == ""
+
+    def test_multiple_openings_grouped_separately(self):
+        """Test that different openings are grouped separately."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "2222222"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Ruy Lopez"]
+[ECO "C65"]
+
+1. e4 e5 1-0
+
+[Event "Tournament"]
+[Date "2024.03.02"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "3333333"]
+[WhiteElo "2800"]
+[BlackElo "2600"]
+[Opening "Queen's Gambit Declined"]
+[ECO "D50"]
+
+1. d4 d5 1-0
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 2
+        # Sorted by games descending; both have 1 game, so order depends on insertion
+        openings = {s["opening"] for s in stats}
+        assert "Ruy Lopez" in openings
+        assert "Queen's Gambit Declined" in openings
+
+    def test_sorted_by_game_count_descending(self):
+        """Test that results are sorted by game count descending."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "2222222"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Lesser Opening"]
+[ECO "A00"]
+
+1. a3 a6 1-0
+
+[Event "Tournament"]
+[Date "2024.03.02"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "3333333"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Greater Opening"]
+[ECO "C65"]
+
+1. e4 e5 1-0
+
+[Event "Tournament"]
+[Date "2024.03.03"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "4444444"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Greater Opening"]
+[ECO "C65"]
+
+1. e4 e5 1-0
+
+[Event "Tournament"]
+[Date "2024.03.04"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "5555555"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Greater Opening"]
+[ECO "C65"]
+
+1. e4 e5 1-0
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 2
+        assert stats[0]["opening"] == "Greater Opening"
+        assert stats[0]["games"] == 3
+        assert stats[1]["opening"] == "Lesser Opening"
+        assert stats[1]["games"] == 1
+
+    def test_non_matching_games_ignored(self):
+        """Test that games where player doesn't match FIDE ID are ignored."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "PlayerA"]
+[Black "PlayerB"]
+[Result "1-0"]
+[WhiteFideId "1111111"]
+[BlackFideId "2222222"]
+[WhiteElo "2700"]
+[BlackElo "2600"]
+[Opening "Some Opening"]
+[ECO "C65"]
+
+1. e4 e5 1-0
+
+[Event "Tournament"]
+[Date "2024.03.02"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "3333333"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Ruy Lopez"]
+[ECO "C65"]
+
+1. e4 e5 1-0
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 1
+        assert stats[0]["opening"] == "Ruy Lopez"
+        assert stats[0]["games"] == 1
+
+    def test_draw_outcome_handling(self):
+        """Test that draws are correctly counted."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1/2-1/2"]
+[WhiteFideId "1503014"]
+[BlackFideId "2222222"]
+[WhiteElo "2800"]
+[BlackElo "2700"]
+[Opening "Berlin Defense"]
+[ECO "C65"]
+
+1. e4 e5 1/2-1/2
+
+[Event "Tournament"]
+[Date "2024.03.02"]
+[White "Opponent"]
+[Black "Carlsen"]
+[Result "1/2-1/2"]
+[WhiteFideId "2222222"]
+[BlackFideId "1503014"]
+[WhiteElo "2700"]
+[BlackElo "2800"]
+[Opening "Berlin Defense"]
+[ECO "C65"]
+
+1. e4 e5 1/2-1/2
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 1
+        assert stats[0]["draws"] == 2
+        assert stats[0]["wins"] == 0
+        assert stats[0]["losses"] == 0
+        assert stats[0]["win_pct"] == 0
+
+    def test_missing_elo_returns_none(self):
+        """Test that missing Elo returns None for avg_elo."""
+        pgn_text = """[Event "Tournament"]
+[Date "2024.03.01"]
+[White "Carlsen"]
+[Black "Opponent"]
+[Result "1-0"]
+[WhiteFideId "1503014"]
+[BlackFideId "2222222"]
+[Opening "Unknown Opening"]
+[ECO "A00"]
+
+1. a3 a6 1-0
+"""
+        stats = collect_opening_stats(pgn_text, "1503014")
+
+        assert len(stats) == 1
+        assert stats[0]["avg_elo"] is None
