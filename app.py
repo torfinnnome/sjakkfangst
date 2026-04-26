@@ -89,20 +89,23 @@ def fetch_stream():
             url_parts = broadcast["url"].rstrip("/").split("/")
             tournament_id = url_parts[-1] if len(url_parts) >= 5 else ""
 
-            # Check player cache first
+            # Check caches
             player_cached = get_cached_player(fide_id, tournament_id)
             is_cached = player_cached is not None
+
+            tournament_pgn = None
+            if not is_cached:
+                tournament_pgn = get_cached_tournament(tournament_id)
+                is_cached = tournament_pgn is not None
 
             # Send progress update with cached info
             yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': is_cached})}\n\n"
 
-            if is_cached:
+            if player_cached:
                 if player_cached:
                     all_games.append(player_cached)
                 continue
 
-            # Fallback: check tournament cache and re-filter
-            tournament_pgn = get_cached_tournament(tournament_id)
             if tournament_pgn:
                 filtered = filter_games_by_fide(tournament_pgn, fide_id, player_name)
                 if filtered:
