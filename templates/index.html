@@ -574,7 +574,7 @@
             data.forEach(s => {
                 const tr = document.createElement('tr');
                 tr.innerHTML =
-                    `<td>${s.opening}</td>` +
+                    `<td><a href="https://lichess.org/opening?q=${encodeURIComponent(s.opening)}" target="_blank" rel="noopener">${s.opening}</a></td>` +
                     `<td class="num">${s.games}</td>` +
                     `<td class="num">${s.whites}</td>` +
                     `<td class="num">${s.blacks}</td>` +
