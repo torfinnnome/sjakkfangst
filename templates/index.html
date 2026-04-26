@@ -254,6 +254,21 @@
         .github-link:hover {
             color: #333;
         }
+        #download-btn {
+            margin-top: 12px;
+            padding: 10px 24px;
+            background-color: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: none;
+        }
+        #download-btn:hover {
+            background-color: #1b5e20;
+        }
         .github-icon {
             width: 20px;
             height: 20px;
@@ -286,6 +301,9 @@
                 <div id="progress-bar-fill"></div>
             </div>
             <div id="status-text">Preparing...</div>
+            <div style="text-align: center;">
+                <a id="download-btn" href="#">Download PGN</a>
+            </div>
 
             <details id="stats-container">
                 <summary>Opening Statistics</summary>
@@ -345,6 +363,7 @@
         const statsContainer = document.getElementById('stats-container');
         const statsOverview = document.getElementById('stats-overview');
         const statsTableBody = document.querySelector('#stats-table tbody');
+        const downloadBtn = document.getElementById('download-btn');
 
         let currentEventSource = null;
 
@@ -370,6 +389,7 @@
             statsContainer.style.display = 'none';
             statsContainer.open = false;
             statsTableBody.innerHTML = '';
+            downloadBtn.style.display = 'none';
 
             // Start SSE connection with cache-buster
             currentEventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}&t=${Date.now()}`);
@@ -425,7 +445,7 @@
                 }
 
                 if (data.done) {
-                    statusText.innerText = 'Done! Starting download...';
+                    statusText.innerText = 'Done!';
                     progressBarFill.style.width = '100%';
 
                     // Render opening stats
@@ -446,27 +466,13 @@
 
                     currentEventSource.close();
                     currentEventSource = null;
-                    
-                    // Trigger download using a hidden link (more robust for Safari)
-                    const downloadUrl = `/download/${data.id}`;
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = downloadUrl;
-                    // The presence of the download attribute helps Safari/Chrome 
-                    // treat it as a file download rather than a navigation
-                    document.body.appendChild(a);
-                    a.click();
-                    
-                    // Clean up
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                    }, 100);
-                    
-                    // Re-enable form after a delay (keep "Done!" message visible)
-                    setTimeout(() => {
-                        submitBtn.disabled = false;
-                        // Keep progressContainer visible for user review
-                    }, 5000);
+
+                    // Show download button
+                    downloadBtn.href = `/download/${data.id}`;
+                    downloadBtn.download = '';
+                    downloadBtn.style.display = 'inline-block';
+
+                    submitBtn.disabled = false;
                 }
             };
 
