@@ -382,16 +382,48 @@
         let currentStats = [];
         let statsSortCol = null;
         let statsSortDir = 'desc';
+        let rateLimitTimer = null;
+
+        function startRateLimitCountdown(seconds) {
+            submitBtn.disabled = true;
+            let remaining = seconds;
+
+            function tick() {
+                submitBtn.disabled = true;
+                submitBtn.value = `Wait ${remaining}s...`;
+                errorText.innerText = 'Rate limited — please wait.';
+                errorText.style.display = 'block';
+
+                if (remaining <= 0) {
+                    clearInterval(rateLimitTimer);
+                    rateLimitTimer = null;
+                    submitBtn.disabled = false;
+                    submitBtn.value = 'Fetch Games';
+                    errorText.style.display = 'none';
+                    return;
+                }
+                remaining--;
+            }
+
+            tick();
+            rateLimitTimer = setInterval(tick, 1000);
+        }
 
         form.onsubmit = function(e) {
             e.preventDefault();
-            
+            if (submitBtn.disabled) return;
+
             const url = urlInput.value.trim();
             if (!url) return;
 
             // Close any existing connection
             if (currentEventSource) {
                 currentEventSource.close();
+                currentEventSource = null;
+            }
+            if (rateLimitTimer) {
+                clearInterval(rateLimitTimer);
+                rateLimitTimer = null;
             }
 
             // Reset UI
@@ -412,6 +444,13 @@
 
             currentEventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
+
+                if (data.rate_limit) {
+                    currentEventSource.close();
+                    currentEventSource = null;
+                    startRateLimitCountdown(data.wait);
+                    return;
+                }
 
                 if (data.error) {
                     showError(data.error);

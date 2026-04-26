@@ -9,6 +9,7 @@ from flask import Flask, render_template, request, send_file, Response
 from scraper import parse_fide_url, get_broadcasts
 from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
 from cache import get_cached_player, cache_player, get_cached_tournament, cache_tournament
+from rate_limit import rate_limiter
 
 app = Flask(__name__)
 
@@ -26,6 +27,14 @@ def index():
 @app.route("/fetch_stream", methods=["GET"])
 def fetch_stream():
     """Stream progress of PGN fetching as Server-Sent Events."""
+    client_ip = request.remote_addr
+    allowed, reason, wait = rate_limiter.check(client_ip)
+    if not allowed:
+        return Response(
+            f"data: {json.dumps({'rate_limit': reason, 'wait': int(wait) + 1})}\n\n",
+            mimetype="text/event-stream",
+        )
+
     url = request.args.get("url", "").strip()
     if not url:
         return "Error: Please provide a URL", 400
