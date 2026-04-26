@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -54,7 +54,7 @@ def _parse_tournament_end_date(pgn_text: str) -> Optional[datetime]:
                 int(match.group(2)),
                 int(match.group(3)),
             )
-            dates.append(datetime(year, month, day, tzinfo=UTC))
+            dates.append(datetime(year, month, day, tzinfo=timezone.utc))
         except ValueError:
             continue
 
@@ -76,7 +76,7 @@ def _determine_tournament_status(pgn_text: str) -> Tuple[str, Optional[str]]:
         # No date info - treat as ongoing (safer default)
         return "ongoing", None
 
-    days_since_end = (datetime.now(UTC) - end_date).days
+    days_since_end = (datetime.now(timezone.utc) - end_date).days
 
     if days_since_end > CACHE_COMPLETED_DAYS:
         return "completed", end_date.isoformat()
@@ -99,10 +99,10 @@ def _is_expired(metadata: dict) -> bool:
     cached_at = datetime.fromisoformat(metadata["cached_at"])
     # Ensure cached_at is timezone-aware if it wasn't already
     if cached_at.tzinfo is None:
-        cached_at = cached_at.replace(tzinfo=UTC)
+        cached_at = cached_at.replace(tzinfo=timezone.utc)
         
     ttl = timedelta(hours=CACHE_TTL_HOURS)
-    return datetime.now(UTC) - cached_at > ttl
+    return datetime.now(timezone.utc) - cached_at > ttl
 
 
 def _cleanup_expired(subdir: str, hash_key: str) -> None:
@@ -173,7 +173,7 @@ def cache_tournament(tournament_id: str, pgn_text: str, url: str = "") -> None:
         status, end_date = _determine_tournament_status(pgn_text)
 
         metadata = {
-            "cached_at": datetime.now(UTC).isoformat(),
+            "cached_at": datetime.now(timezone.utc).isoformat(),
             "tournament_id": tournament_id,
             "url": url,
             "status": status,
@@ -234,7 +234,7 @@ def cache_player(fide_id: str, tournament_id: str, pgn_text: str) -> None:
         pgn_path.write_text(pgn_text)
 
         metadata = {
-            "cached_at": datetime.now(UTC).isoformat(),
+            "cached_at": datetime.now(timezone.utc).isoformat(),
             "fide_id": fide_id,
             "tournament_id": tournament_id,
         }
