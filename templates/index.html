@@ -327,6 +327,8 @@
                             <tr>
                                 <th>Opening</th>
                                 <th class="num">Games</th>
+                                <th class="num">⬜</th>
+                                <th class="num">⬛</th>
                                 <th class="num win">W</th>
                                 <th class="num draw">D</th>
                                 <th class="num loss">L</th>
@@ -574,6 +576,8 @@
                 tr.innerHTML =
                     `<td>${s.opening}</td>` +
                     `<td class="num">${s.games}</td>` +
+                    `<td class="num">${s.whites}</td>` +
+                    `<td class="num">${s.blacks}</td>` +
                     `<td class="num win">${s.wins}</td>` +
                     `<td class="num draw">${s.draws}</td>` +
                     `<td class="num loss">${s.losses}</td>` +
@@ -596,6 +600,8 @@
             const cols = [
                 { key: 'opening', numeric: false },
                 { key: 'games', numeric: true },
+                { key: 'whites', numeric: true },
+                { key: 'blacks', numeric: true },
                 { key: 'wins', numeric: true },
                 { key: 'draws', numeric: true },
                 { key: 'losses', numeric: true },

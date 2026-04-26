@@ -677,12 +677,15 @@ def collect_opening_stats(pgn_text, fide_id):
             else:
                 outcome = "D"
 
-        # Get opening name: always use ECO lookup, ignore Lichess Opening header
+        # Get opening name: prefer Lichess Opening header, fallback to ECO lookup
         eco_code = headers.get("ECO", "")
-        if eco_code:
+        lichess_opening = headers.get("Opening", "")
+        if lichess_opening:
+            opening = lichess_opening
+        elif eco_code:
             opening = ECO_OPENINGS.get(eco_code, f"ECO {eco_code}")
         else:
-            opening = headers.get("Opening", "Unknown")
+            opening = "Unknown"
 
         # Get opponent Elo
         opponent_elo = None
@@ -704,6 +707,8 @@ def collect_opening_stats(pgn_text, fide_id):
                 "wins": 0,
                 "draws": 0,
                 "losses": 0,
+                "whites": 0,
+                "blacks": 0,
                 "elos": [],
                 "dates": [],
             }
@@ -716,6 +721,10 @@ def collect_opening_stats(pgn_text, fide_id):
             entry["draws"] += 1
         else:
             entry["losses"] += 1
+        if is_white:
+            entry["whites"] += 1
+        else:
+            entry["blacks"] += 1
         if opponent_elo is not None:
             entry["elos"].append(opponent_elo)
         entry["dates"].append(date_str)
@@ -738,6 +747,8 @@ def collect_opening_stats(pgn_text, fide_id):
                 "wins": entry["wins"],
                 "draws": entry["draws"],
                 "losses": entry["losses"],
+                "whites": entry["whites"],
+                "blacks": entry["blacks"],
                 "win_pct": win_pct,
                 "avg_elo": avg_elo,
                 "date_from": min(entry["dates"]) if entry["dates"] else "",
