@@ -2,15 +2,20 @@
 
 import io
 import json
+import logging
 import os
+import sys
 import time
 import uuid
-from flask import Flask, render_template, request, send_file, Response
+from flask import Flask, request, send_file, Response, render_template
 
 from scraper import parse_fide_url, get_broadcasts
 from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
 from cache import get_cached_player, cache_player, get_cached_tournament, cache_tournament, _get_hash, _get_metadata_path
 from rate_limit import rate_limiter
+
+url_logger = logging.getLogger("sjakkfangst.urls")
+url_logger.propagate = False
 
 app = Flask(__name__)
 
@@ -47,6 +52,8 @@ def fetch_stream():
 
     fide_id = player_info["fide_id"]
     player_name = player_info["player_name"]
+
+    url_logger.info("URL: %s  fide: %s  name: %s", url, fide_id, player_name)
 
     def generate():
         # Get list of broadcasts
@@ -103,6 +110,7 @@ def fetch_stream():
 
             if player_cached:
                 if player_cached:
+                    url_logger.info("[%s/%s] %s - player cache hit", i + 1, total, name)
                     all_games.append(player_cached)
                 continue
 
@@ -120,6 +128,7 @@ def fetch_stream():
                 filtered = filter_games_by_fide(tournament_pgn, fide_id, player_name)
                 if filtered:
                     cache_player(fide_id, tournament_id, filtered, tournament_status)
+                    url_logger.info("[%s/%s] %s - tournament cache hit", i + 1, total, name)
                     all_games.append(filtered)
                 continue
 
@@ -135,9 +144,11 @@ def fetch_stream():
                 filtered = filter_games_by_fide(pgn_text, fide_id, player_name)
                 cache_player(fide_id, tournament_id, filtered)
                 if filtered:
+                    url_logger.info("[%s/%s] %s - downloaded", i + 1, total, name)
                     all_games.append(filtered)
 
         if not all_games:
+            url_logger.info("no games found for %s", player_name)
             yield f"data: {json.dumps({'error': 'No matching games found'})}\n\n"
             return
 
@@ -152,6 +163,7 @@ def fetch_stream():
         # Collect opening stats for the player
         opening_stats = collect_opening_stats(combined_pgn, fide_id)
 
+        url_logger.info("done: %s — %s games", player_name, len(all_games))
         yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': opening_stats})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
@@ -176,6 +188,12 @@ def download(task_id):
         download_name=task["filename"],
     )
 
+
+if os.environ.get("SJAKKFANGST_LOG_URLS"):
+    _h = logging.StreamHandler(sys.stderr)
+    _h.setFormatter(logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%dT%H:%M:%S"))
+    url_logger.addHandler(_h)
+    url_logger.setLevel(logging.INFO)
 
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG") == "1")

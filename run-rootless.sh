@@ -10,6 +10,9 @@ MEMORY_LIMIT="${MEMORY_LIMIT:-512m}"
 HOST_CACHE_DIR="${HOST_CACHE_DIR:-$PWD/cache}"
 CACHE_TTL_HOURS="${CACHE_TTL_HOURS:-24}"
 
+# Logging configuration
+SJAKKFANGST_LOG_URLS="${SJAKKFANGST_LOG_URLS:-}"
+
 # Parse arguments
 FOREGROUND=true
 for arg in "$@"; do
@@ -29,6 +32,7 @@ for arg in "$@"; do
             echo "  MEMORY_LIMIT       Container memory limit (default: 512m)"
             echo "  HOST_CACHE_DIR     Cache directory path (default: ./cache)"
             echo "  CACHE_TTL_HOURS    Cache TTL in hours (default: 24)"
+            echo "  SJAKKFANGST_LOG_URLS  Enable URL logging to stderr (set to 1)"
             exit 0
             ;;
         *)
@@ -99,6 +103,8 @@ if [ "$FOREGROUND" = true ]; then
     # Note: CPU limits (--cpus) are not enabled by default because they require
     # kernel cgroup delegation setup (uncommon on most distributions).
     # Memory limits work fine in rootless mode.
+    echo "  URL logging: ${SJAKKFANGST_LOG_URLS:+enabled}"
+
     exec podman run \
         --name "$CONTAINER_NAME" \
         --rm \
@@ -108,6 +114,7 @@ if [ "$FOREGROUND" = true ]; then
         --userns=keep-id \
         -e CACHE_DIR=/cache \
         -e CACHE_TTL_HOURS="$CACHE_TTL_HOURS" \
+        -e SJAKKFANGST_LOG_URLS="$SJAKKFANGST_LOG_URLS" \
         -u 1000:1000 \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \
@@ -133,6 +140,7 @@ else
         --userns=keep-id \
         -e CACHE_DIR=/cache \
         -e CACHE_TTL_HOURS="$CACHE_TTL_HOURS" \
+        -e SJAKKFANGST_LOG_URLS="$SJAKKFANGST_LOG_URLS" \
         -u 1000:1000 \
         --cap-drop=ALL \
         --security-opt=no-new-privileges \

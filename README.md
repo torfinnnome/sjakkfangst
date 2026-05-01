@@ -51,6 +51,29 @@ When running with Podman, the cache is persisted on the host in the `./cache` di
 | `CACHE_TTL_HOURS` | 24 | Expiration time for ongoing tournaments |
 | `HOST_CACHE_DIR` | `./cache` | Host path for persistent storage |
 
+### Logging
+
+Optionally log submitted URLs and cache results to stderr (useful for monitoring in Podman):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SJAKKFANGST_LOG_URLS` | *(disabled)* | Set to `1` to enable logging |
+
+When enabled, each fetch request produces output like:
+
+```
+[2026-05-01T12:34:56] URL: https://lichess.org/fide/1503014/Carlsen_Magnus  fide: 1503014  name: Carlsen_Magnus
+[2026-05-01T12:34:57] [1/12] Tata Steel Chess 2026 - player cache hit
+[2026-05-01T12:34:57] [2/12] Norway Chess 2026 - tournament cache hit
+[2026-05-01T12:35:00] [3/12] Sinquefield Cup 2026 - downloaded
+[2026-05-01T12:35:10] done: Carlsen_Magnus — 47 games
+```
+
+Enable with Podman:
+```bash
+SJAKKFANGST_LOG_URLS=1 ./run-rootless.sh
+```
+
 ## Usage (Direct)
 
 If not using Podman, run the Flask application directly:
