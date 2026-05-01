@@ -42,7 +42,7 @@ RUN mkdir -p /cache/tournaments /cache/players && \
 
 # Environment variables for cache configuration
 ENV CACHE_DIR=/cache \
-    CACHE_TTL_HOURS=24
+    CACHE_TTL_HOURS=1
 
 # Copy application code
 COPY --chown=appuser:appuser app.py scraper.py pgn_processor.py cache.py rate_limit.py ./

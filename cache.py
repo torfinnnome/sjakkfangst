@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
 CACHE_DIR = os.environ.get("CACHE_DIR", "/cache")
-CACHE_TTL_HOURS = int(os.environ.get("CACHE_TTL_HOURS", "24"))
+CACHE_TTL_HOURS = int(os.environ.get("CACHE_TTL_HOURS", "1"))
 CACHE_COMPLETED_DAYS = int(os.environ.get("CACHE_COMPLETED_DAYS", "5"))
 
 

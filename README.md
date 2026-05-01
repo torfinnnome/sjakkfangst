@@ -48,7 +48,7 @@ When running with Podman, the cache is persisted on the host in the `./cache` di
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CACHE_TTL_HOURS` | 24 | Expiration time for ongoing tournaments |
+| `CACHE_TTL_HOURS` | 1 | Expiration time for ongoing tournaments |
 | `HOST_CACHE_DIR` | `./cache` | Host path for persistent storage |
 
 ### Logging
