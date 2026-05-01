@@ -9,7 +9,7 @@ from flask import Flask, render_template, request, send_file, Response
 
 from scraper import parse_fide_url, get_broadcasts
 from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
-from cache import get_cached_player, cache_player, get_cached_tournament, cache_tournament
+from cache import get_cached_player, cache_player, get_cached_tournament, cache_tournament, _get_hash, _get_metadata_path
 from rate_limit import rate_limiter
 
 app = Flask(__name__)
@@ -107,9 +107,19 @@ def fetch_stream():
                 continue
 
             if tournament_pgn:
+                # Read tournament status from cache metadata to propagate to player cache
+                hash_key = _get_hash(tournament_id)
+                meta_path = _get_metadata_path("tournaments", hash_key)
+                tournament_status = None
+                try:
+                    meta_data = json.loads(meta_path.read_text())
+                    tournament_status = meta_data.get("status")
+                except Exception:
+                    pass
+
                 filtered = filter_games_by_fide(tournament_pgn, fide_id, player_name)
                 if filtered:
-                    cache_player(fide_id, tournament_id, filtered)
+                    cache_player(fide_id, tournament_id, filtered, tournament_status)
                     all_games.append(filtered)
                 continue
 

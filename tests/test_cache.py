@@ -185,6 +185,20 @@ def test_parse_tournament_end_date():
     assert result_no_date is None
 
 
+def test_parse_tournament_end_date_dash_format():
+    """Test parsing of dash-formatted dates (YYYY-MM-DD) from Lichess broadcasts."""
+    pgn_dash = """[Event "Dash Format"]
+[Date "2024-01-15"]
+1. e4 e5
+
+[Event "Dash Format"]
+[Date "2024-01-16"]
+1. d4 d5"""
+
+    result = cache._parse_tournament_end_date(pgn_dash)
+    assert result == datetime(2024, 1, 16, tzinfo=timezone.utc)
+
+
 def test_determine_tournament_status_completed():
     """Test status detection for completed tournament (> 5 days)."""
     # Create PGN with date 10 days ago
@@ -329,6 +343,44 @@ def test_completed_player_cache_never_expires(temp_cache_dir):
 
     result = cache.get_cached_player(fide_id, tournament_id)
     assert result == pgn_data, "Completed player cache should never expire"
+
+
+def test_missing_status_recovered_on_read(temp_cache_dir):
+    """Test that a player cache entry without a status field has it auto-detected on read.
+
+    Old cache entries may lack the 'status' field. On read, the status should be
+    detected from the PGN and written back to metadata.
+    """
+    fide_id = "1503014"
+    tournament_id = "missing-status-tourney"
+    old_date = (datetime.now() - timedelta(days=10)).strftime("%Y.%m.%d")
+    pgn_data = f'''[Event "Finished"]
+[Date "{old_date}"]
+1. e4 e5'''
+
+    # Manually create cache entry without status field
+    hash_key = cache._get_hash(f"{fide_id}_{tournament_id}")
+    pgn_path = Path(temp_cache_dir) / "players" / f"{hash_key}.pgn"
+    meta_path = Path(temp_cache_dir) / "players" / f"{hash_key}.meta"
+
+    pgn_path.parent.mkdir(parents=True, exist_ok=True)
+    pgn_path.write_text(pgn_data)
+
+    # Write metadata WITHOUT status field (old format)
+    metadata = {
+        "cached_at": (datetime.now(timezone.utc) - timedelta(days=30)).isoformat(),
+        "fide_id": fide_id,
+        "tournament_id": tournament_id,
+    }
+    meta_path.write_text(json.dumps(metadata))
+
+    # Read should auto-detect status from PGN and NOT expire
+    result = cache.get_cached_player(fide_id, tournament_id)
+    assert result == pgn_data, "Entry with missing status should be recovered"
+
+    # Verify metadata was updated with status
+    updated_metadata = json.loads(meta_path.read_text())
+    assert updated_metadata["status"] == "completed"
 
 
 def test_ongoing_player_cache_expires(temp_cache_dir):

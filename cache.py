@@ -43,8 +43,8 @@ def _parse_tournament_end_date(pgn_text: str) -> Optional[datetime]:
     Returns:
         Latest date found in PGN headers, or None if not found.
     """
-    # Look for Date headers in format [Date "YYYY.MM.DD"]
-    date_pattern = r'\[Date "(\d{4})\.(\d{2})\.(\d{2})"\]'
+    # Look for Date headers in format [Date "YYYY.MM.DD"] or [Date "YYYY-MM-DD"]
+    date_pattern = r'\[Date "(\d{4})[.\-](\d{2})[.\-](\d{2})"\]'
     dates = []
 
     for match in re.finditer(date_pattern, pgn_text):
@@ -207,10 +207,18 @@ def get_cached_player(fide_id: str, tournament_id: str) -> Optional[str]:
 
     try:
         metadata = json.loads(meta_path.read_text())
+        pgn_text = pgn_path.read_text()
+
+        # Re-evaluate status from PGN to handle missing or outdated status
+        if "status" not in metadata:
+            status, _ = _determine_tournament_status(pgn_text)
+            metadata["status"] = status
+            meta_path.write_text(json.dumps(metadata))
+
         if _is_expired(metadata):
             _cleanup_expired("players", hash_key)
             return None
-        return pgn_path.read_text()
+        return pgn_text
     except (json.JSONDecodeError, IOError):
         _cleanup_expired("players", hash_key)
         return None
