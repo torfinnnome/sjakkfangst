@@ -59,15 +59,13 @@ Optionally log submitted URLs and cache results to stderr (useful for monitoring
 |----------|---------|-------------|
 | `SJAKKFANGST_LOG_URLS` | *(disabled)* | Set to `1` to enable logging |
 
-When enabled, each fetch request produces output like:
+When enabled, each fetch request produces a single line of output:
 
 ```
-[2026-05-01T12:34:56] URL: https://lichess.org/fide/1503014/Carlsen_Magnus  fide: 1503014  name: Carlsen_Magnus
-[2026-05-01T12:34:57] [1/12] Tata Steel Chess 2026 - player cache hit
-[2026-05-01T12:34:57] [2/12] Norway Chess 2026 - tournament cache hit
-[2026-05-01T12:35:00] [3/12] Sinquefield Cup 2026 - downloaded
-[2026-05-01T12:35:10] done: Carlsen_Magnus — 47 games
+[2026-05-01T12:34:56] https://lichess.org/fide/1503014/Carlsen_Magnus  Carlsen_Magnus (1503014)  12 tours  p=5 t=4 d=3  = 47 games
 ```
+
+The counters indicate: `p` = player cache hit, `t` = tournament cache hit, `d` = downloaded.
 
 Enable with Podman:
 ```bash

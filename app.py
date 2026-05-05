@@ -163,8 +163,8 @@ def fetch_stream():
         # Collect opening stats for the player
         opening_stats = collect_opening_stats(combined_pgn, fide_id)
 
-        url_logger.info("%s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
-                       player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
+        url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
+                       url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
         yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': opening_stats})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
