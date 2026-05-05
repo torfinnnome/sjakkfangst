@@ -53,8 +53,6 @@ def fetch_stream():
     fide_id = player_info["fide_id"]
     player_name = player_info["player_name"]
 
-    url_logger.info("URL: %s  fide: %s  name: %s", url, fide_id, player_name)
-
     def generate():
         # Get list of broadcasts
         broadcasts = get_broadcasts(fide_id, player_name)
@@ -65,6 +63,9 @@ def fetch_stream():
 
         all_games = []
         processed_tournaments = set()
+        p_hits = 0
+        t_hits = 0
+        d_hits = 0
 
         # Deduplicate broadcasts by tournament slug
         unique_broadcasts = []
@@ -110,7 +111,7 @@ def fetch_stream():
 
             if player_cached:
                 if player_cached:
-                    url_logger.info("[%s/%s] %s - player cache hit", i + 1, total, name)
+                    p_hits += 1
                     all_games.append(player_cached)
                 continue
 
@@ -128,7 +129,7 @@ def fetch_stream():
                 filtered = filter_games_by_fide(tournament_pgn, fide_id, player_name)
                 if filtered:
                     cache_player(fide_id, tournament_id, filtered, tournament_status)
-                    url_logger.info("[%s/%s] %s - tournament cache hit", i + 1, total, name)
+                    t_hits += 1
                     all_games.append(filtered)
                 continue
 
@@ -144,11 +145,10 @@ def fetch_stream():
                 filtered = filter_games_by_fide(pgn_text, fide_id, player_name)
                 cache_player(fide_id, tournament_id, filtered)
                 if filtered:
-                    url_logger.info("[%s/%s] %s - downloaded", i + 1, total, name)
+                    d_hits += 1
                     all_games.append(filtered)
 
         if not all_games:
-            url_logger.info("no games found for %s", player_name)
             yield f"data: {json.dumps({'error': 'No matching games found'})}\n\n"
             return
 
@@ -163,7 +163,8 @@ def fetch_stream():
         # Collect opening stats for the player
         opening_stats = collect_opening_stats(combined_pgn, fide_id)
 
-        url_logger.info("done: %s — %s games", player_name, len(all_games))
+        url_logger.info("%s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
+                       player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
         yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': opening_stats})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
