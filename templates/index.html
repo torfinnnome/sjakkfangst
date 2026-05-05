@@ -10,7 +10,7 @@
             max-width: 600px;
             margin: 50px auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: #f3f4f6;
         }
         .container {
             background: white;
@@ -44,11 +44,11 @@
         }
         input[type="url"]:focus {
             outline: none;
-            border-color: #4a90d9;
+            border-color: #369962;
         }
         button {
             padding: 12px 24px;
-            background-color: #4a90d9;
+            background-color: #369962;
             color: white;
             border: none;
             border-radius: 4px;
@@ -57,7 +57,7 @@
             transition: background-color 0.2s;
         }
         button:hover {
-            background-color: #357abd;
+            background-color: #2A7A4F;
         }
         button:disabled {
             background-color: #ccc;
@@ -79,7 +79,7 @@
         #progress-bar-fill {
             width: 0%;
             height: 100%;
-            background-color: #4caf50;
+            background-color: #369962;
             transition: width 0.3s ease;
         }
         #status-text {
@@ -90,10 +90,10 @@
         }
         #error-text {
             margin-top: 20px;
-            color: #d32f2f;
+            color: #B91C1C;
             display: none;
             padding: 10px;
-            background: #ffebee;
+            background: #FEF2F2;
             border-radius: 4px;
         }
 
@@ -134,7 +134,7 @@
             font-weight: 600;
         }
         .tournament-item.done {
-            color: #4caf50;
+            color: #369962;
         }
         .cached-label {
             font-size: 11px;
@@ -221,10 +221,10 @@
             text-align: center;
         }
         #stats-table .win {
-            color: #2e7d32;
+            color: #369962;
         }
         #stats-table .loss {
-            color: #c62828;
+            color: #B91C1C;
         }
         #stats-table .draw {
             color: #666;
@@ -234,11 +234,29 @@
             font-size: 11px;
         }
 
+        .patron-box {
+            margin-top: 15px;
+            padding: 12px 15px;
+            background-color: #F0F9F4;
+            border-left: 4px solid #369962;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #555;
+        }
+        .patron-box a {
+            color: #369962;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .patron-box a:hover {
+            text-decoration: underline;
+        }
+
         .example {
             margin-top: 20px;
             padding: 15px;
             background-color: #f9f9f9;
-            border-left: 4px solid #4a90d9;
+            border-left: 4px solid #369962;
             font-size: 14px;
             color: #666;
         }
@@ -270,7 +288,7 @@
         #download-btn {
             margin-top: 12px;
             padding: 10px 24px;
-            background-color: #2e7d32;
+            background-color: #369962;
             color: white;
             border: none;
             border-radius: 4px;
@@ -280,7 +298,7 @@
             display: none;
         }
         #download-btn:hover {
-            background-color: #1b5e20;
+            background-color: #2A7A4F;
         }
         .github-icon {
             width: 20px;
@@ -308,6 +326,10 @@
             >
             <button type="submit" id="submit-btn">Fetch Games</button>
         </form>
+
+        <div class="patron-box">
+            Enjoying this? <a href="https://lichess.org/patron" target="_blank" rel="noopener">Support Lichess</a>
+        </div>
 
         <div id="progress-container">
             <div id="progress-bar-bg">
