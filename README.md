@@ -51,6 +51,14 @@ When running with Podman, the cache is persisted on the host in the `./cache` di
 | `CACHE_TTL_HOURS` | 1 | Expiration time for ongoing tournaments |
 | `HOST_CACHE_DIR` | `./cache` | Host path for persistent storage |
 
+### Scraper Configuration
+
+Sjakkfangst paginates through Lichess FIDE player pages to find all broadcast tournaments. To avoid excessive requests, the number of tournaments is capped:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_BROADCASTS` | 100 | Maximum tournaments to fetch per player (~4–5 pages) |
+
 ### Logging
 
 Optionally log submitted URLs and cache results to stderr (useful for monitoring in Podman):

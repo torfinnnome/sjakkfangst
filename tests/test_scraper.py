@@ -176,3 +176,127 @@ class TestGetBroadcasts:
         result = get_broadcasts("1503014", "Carlsen_Magnus")
 
         assert result == []
+
+    @patch("scraper.requests.get")
+    def test_pagination_fetches_next_page(self, mock_get):
+        """Test that pagination follows next page link."""
+        page1 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-1/r1/id1"><h3 class="relay-card__title">Tournament 1</h3></a>
+                <div class="pager"><a rel="next" href="/fide/1503014/Carlsen_Magnus?page=2">Next</a></div>
+            </div>
+        </body></html>
+        """
+        page2 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-2/r1/id2"><h3 class="relay-card__title">Tournament 2</h3></a>
+            </div>
+        </body></html>
+        """
+
+        mock_get.side_effect = [
+            Mock(status_code=200, text=page1),
+            Mock(status_code=200, text=page2),
+        ]
+
+        result = get_broadcasts("1503014", "Carlsen_Magnus")
+
+        assert result == [
+            {"url": "https://lichess.org/broadcast/tour-1/r1/id1", "name": "Tournament 1"},
+            {"url": "https://lichess.org/broadcast/tour-2/r1/id2", "name": "Tournament 2"},
+        ]
+        assert mock_get.call_count == 2
+
+    @patch("scraper.requests.get")
+    def test_max_broadcasts_limits_results(self, mock_get):
+        """Test that max_broadcasts parameter limits the number of results."""
+        page1 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-1/r1/id1"><h3 class="relay-card__title">T1</h3></a>
+                <a href="/broadcast/tour-1/r2/id2"><h3 class="relay-card__title">T2</h3></a>
+                <div class="pager"><a rel="next" href="/fide/1503014/Carlsen_Magnus?page=2">Next</a></div>
+            </div>
+        </body></html>
+        """
+        page2 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-2/r1/id3"><h3 class="relay-card__title">T3</h3></a>
+            </div>
+        </body></html>
+        """
+
+        mock_get.side_effect = [
+            Mock(status_code=200, text=page1),
+            Mock(status_code=200, text=page2),
+        ]
+
+        result = get_broadcasts("1503014", "Carlsen_Magnus", max_broadcasts=2)
+
+        assert len(result) == 2
+        assert result[0]["name"] == "T1"
+        assert result[1]["name"] == "T2"
+        assert mock_get.call_count == 1  # Should not fetch page 2
+
+    @patch("scraper.requests.get")
+    def test_pagination_deduplicates_broadcasts(self, mock_get):
+        """Test that duplicate broadcasts across pages are removed."""
+        page1 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-1/r1/id1"><h3 class="relay-card__title">Tournament 1</h3></a>
+                <div class="pager"><a rel="next" href="/fide/1503014/Carlsen_Magnus?page=2">Next</a></div>
+            </div>
+        </body></html>
+        """
+        page2 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-1/r1/id1"><h3 class="relay-card__title">Tournament 1</h3></a>
+                <a href="/broadcast/tour-2/r1/id2"><h3 class="relay-card__title">Tournament 2</h3></a>
+            </div>
+        </body></html>
+        """
+
+        mock_get.side_effect = [
+            Mock(status_code=200, text=page1),
+            Mock(status_code=200, text=page2),
+        ]
+
+        result = get_broadcasts("1503014", "Carlsen_Magnus")
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Tournament 1"
+        assert result[1]["name"] == "Tournament 2"
+
+    @patch("scraper.requests.get")
+    def test_pagination_stops_when_no_next_page(self, mock_get):
+        """Test that pagination stops when there's no pager link."""
+        page1 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-1/r1/id1"><h3 class="relay-card__title">Tournament 1</h3></a>
+                <div class="pager"><a rel="next" href="/fide/1503014/Carlsen_Magnus?page=2">Next</a></div>
+            </div>
+        </body></html>
+        """
+        page2 = """
+        <html><body>
+            <div class="relay-cards">
+                <a href="/broadcast/tour-2/r1/id2"><h3 class="relay-card__title">Tournament 2</h3></a>
+            </div>
+        </body></html>
+        """
+
+        mock_get.side_effect = [
+            Mock(status_code=200, text=page1),
+            Mock(status_code=200, text=page2),
+        ]
+
+        result = get_broadcasts("1503014", "Carlsen_Magnus")
+
+        assert len(result) == 2
+        assert mock_get.call_count == 2
