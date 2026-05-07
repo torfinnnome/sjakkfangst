@@ -407,6 +407,9 @@
         let statsSortCol = null;
         let statsSortDir = 'desc';
         let rateLimitTimer = null;
+        let retryCount = 0;
+        let retryTimer = null;
+        let fetchUrl = null;
 
         function startRateLimitCountdown(seconds) {
             submitBtn.disabled = true;
@@ -463,8 +466,16 @@
             statsTableBody.innerHTML = '';
             downloadBtn.style.display = 'none';
 
+            // Reset retry state
+            retryCount = 0;
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+
             // Start SSE connection with cache-buster
-            currentEventSource = new EventSource(`/fetch_stream?url=${encodeURIComponent(url)}&t=${Date.now()}`);
+            fetchUrl = `/fetch_stream?url=${encodeURIComponent(url)}&t=${Date.now()}`;
+            currentEventSource = new EventSource(fetchUrl);
 
             currentEventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
@@ -556,10 +567,21 @@
             };
 
             currentEventSource.onerror = function() {
-                showError('Connection error or server failure.');
                 if (currentEventSource) {
                     currentEventSource.close();
                     currentEventSource = null;
+                }
+
+                if (retryCount < 3) {
+                    retryCount++;
+                    statusText.innerText = `Connection error — retrying (${retryCount}/3)...`;
+                    retryTimer = setTimeout(function() {
+                        fetchUrl = `/fetch_stream?url=${encodeURIComponent(urlInput.value.trim())}&t=${Date.now()}`;
+                        currentEventSource = new EventSource(fetchUrl);
+                    }, 2000);
+                } else {
+                    showError('Connection error or server failure.');
+                    submitBtn.disabled = false;
                 }
             };
         };
