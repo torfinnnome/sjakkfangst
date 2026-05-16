@@ -631,15 +631,18 @@ def filter_games_by_fide(pgn_text: str, fide_id: str, player_name: str = "") -> 
 def collect_opening_stats(pgn_text, fide_id):
     """Collect opening statistics for a given FIDE player.
 
-    Returns a list of dicts with keys:
-        opening, eco, games, wins, draws, losses, win_pct, avg_elo, date_from, date_to
-    Sorted by games descending.
+    Returns a dict with keys:
+        stats: list of dicts with keys:
+            opening, eco, games, wins, draws, losses, win_pct, avg_elo, date_from, date_to
+        player_name: the player's proper name from PGN headers
+    Stats sorted by games descending.
     """
     if not pgn_text:
         return []
 
     stats = {}
     stream = io.StringIO(pgn_text)
+    player_name = None
 
     while True:
         game = chess.pgn.read_game(stream)
@@ -653,6 +656,10 @@ def collect_opening_stats(pgn_text, fide_id):
 
         if white_fide != fide_id and black_fide != fide_id:
             continue
+
+        # Capture player name from first matching game
+        if player_name is None:
+            player_name = headers.get("White" if white_fide == fide_id else "Black", "")
 
         is_white = white_fide == fide_id
         result = headers.get("Result", "*")
@@ -757,4 +764,4 @@ def collect_opening_stats(pgn_text, fide_id):
         )
 
     result_list.sort(key=lambda x: x["games"], reverse=True)
-    return result_list
+    return {"stats": result_list, "player_name": player_name or ""}

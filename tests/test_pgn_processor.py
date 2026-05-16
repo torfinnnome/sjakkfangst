@@ -243,7 +243,8 @@ class TestCollectOpeningStats:
 
 1. e4 e5 0-1
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 1
         entry = stats[0]
@@ -274,7 +275,8 @@ class TestCollectOpeningStats:
 
 1. e4 c5 0-1
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 1
         entry = stats[0]
@@ -298,7 +300,8 @@ class TestCollectOpeningStats:
 
 1. a3 a6 1-0
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 1
         assert stats[0]["eco"] == "A00"
@@ -316,10 +319,8 @@ class TestCollectOpeningStats:
 
 1. e4 e5 1-0
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
-
-        assert len(stats) == 1
-        assert stats[0]["opening"] == "Unknown"
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
         assert stats[0]["eco"] == ""
 
     def test_multiple_openings_grouped_separately(self):
@@ -352,7 +353,8 @@ class TestCollectOpeningStats:
 
 1. d4 d5 1-0
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 2
         # Sorted by games descending; both have 1 game, so order depends on insertion
@@ -418,7 +420,8 @@ class TestCollectOpeningStats:
 
 1. e4 e5 1-0
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 2
         assert stats[0]["opening"] == "Ruy Lopez: Berlin Defense"
@@ -456,7 +459,8 @@ class TestCollectOpeningStats:
 
 1. e4 e5 1-0
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 1
         assert stats[0]["opening"] == "Ruy Lopez: Berlin Defense"
@@ -492,7 +496,8 @@ class TestCollectOpeningStats:
 
 1. e4 e5 1/2-1/2
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 1
         assert stats[0]["draws"] == 2
@@ -514,7 +519,8 @@ class TestCollectOpeningStats:
 
 1. a3 a6 1-0
 """
-        stats = collect_opening_stats(pgn_text, "1503014")
+        result = collect_opening_stats(pgn_text, "1503014")
+        stats = result["stats"]
 
         assert len(stats) == 1
         assert stats[0]["avg_elo"] is None

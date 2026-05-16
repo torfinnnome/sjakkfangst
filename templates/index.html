@@ -540,8 +540,7 @@
 
                     // Render opening stats
                     if (data.stats && data.stats.length > 0) {
-                        const playerName = urlInput.value.split('/').pop();
-                        renderStats(data.stats, playerName);
+                        renderStats(data.stats, data.player_name || urlInput.value.split('/').pop());
                     }
 
                     // Mark all remaining items as done

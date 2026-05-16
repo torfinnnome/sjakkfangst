@@ -160,12 +160,12 @@ def fetch_stream():
             "filename": f"{player_name}_fide_games_sjakkfangst.pgn",
         }
 
-        # Collect opening stats for the player
-        opening_stats = collect_opening_stats(combined_pgn, fide_id)
+       # Collect opening stats for the player
+        opening_result = collect_opening_stats(combined_pgn, fide_id)
 
         url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
-                       url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
-        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': opening_stats})}\n\n"
+                        url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
+        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': opening_result['stats'], 'player_name': opening_result['player_name']})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
