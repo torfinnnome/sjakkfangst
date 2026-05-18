@@ -8,6 +8,24 @@ from typing import Dict, List, Optional
 import requests
 from bs4 import BeautifulSoup
 
+RETRY_ATTEMPTS = int(os.environ.get("RETRY_ATTEMPTS", "3"))
+RETRY_DELAY = int(os.environ.get("RETRY_DELAY", "2"))
+
+
+def _fetch_with_retry(url: str, timeout: int = 30) -> requests.Response:
+    """Fetch a URL with retry logic for transient errors."""
+    last_exception = None
+    for attempt in range(RETRY_ATTEMPTS):
+        try:
+            response = requests.get(url, timeout=timeout)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as exc:
+            last_exception = exc
+            if attempt < RETRY_ATTEMPTS - 1:
+                time.sleep(RETRY_DELAY)
+    raise last_exception
+
 # Maximum number of broadcasts to fetch per player (configurable via env var)
 MAX_BROADCASTS = int(os.environ.get("MAX_BROADCASTS", "100"))
 
@@ -103,8 +121,7 @@ def get_broadcasts(
     broadcasts = []
 
     try:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        response = _fetch_with_retry(url, timeout=30)
     except requests.RequestException:
         return []
 
@@ -121,8 +138,7 @@ def get_broadcasts(
         full_next_url = f"https://lichess.org{next_url}"
 
         try:
-            response = requests.get(full_next_url, timeout=30)
-            response.raise_for_status()
+            response = _fetch_with_retry(full_next_url, timeout=30)
         except requests.RequestException:
             break
 
