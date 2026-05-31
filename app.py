@@ -82,9 +82,12 @@ def fetch_stream():
 
         total = len(unique_broadcasts)
 
-        # Send list of all tournament names to the client
-        tournament_names = [b["name"] for b in unique_broadcasts]
-        yield f"data: {json.dumps({'tournaments': tournament_names})}\n\n"
+        # Build player game link hash from FIDE ID
+        player_hash = f"#players/{fide_id}"
+
+        # Send list of all tournaments (name + url) to the client
+        tournament_list = [{"name": b["name"], "url": b["url"]} for b in unique_broadcasts]
+        yield f"data: {json.dumps({'tournaments': tournament_list, 'player_hash': player_hash})}\n\n"
 
         for i, broadcast in enumerate(unique_broadcasts):
             name = broadcast["name"]
@@ -107,7 +110,7 @@ def fetch_stream():
                 is_cached = tournament_pgn is not None
 
             # Send progress update with cached info
-            yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': is_cached})}\n\n"
+            yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': is_cached, 'url': broadcast['url']})}\n\n"
 
             if player_cached:
                 if player_cached:

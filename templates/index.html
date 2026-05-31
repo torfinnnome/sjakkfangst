@@ -495,10 +495,12 @@
                 }
 
                 if (data.tournaments) {
-                    data.tournaments.forEach((name, index) => {
+                    const hash = data.player_hash || '';
+                    data.tournaments.forEach((t, index) => {
                         const li = document.createElement('li');
                         li.className = 'tournament-item';
-                        li.innerHTML = `<span class="status-icon">○</span> <span class="tournament-name">${name}</span>`;
+                        const href = t.url ? t.url + hash : '#';
+                        li.innerHTML = `<a href="${href}" target="_blank" rel="noopener" class="tournament-link" title="${t.name}"><span class="status-icon">○</span> <span class="tournament-name">${t.name}</span></a>`;
                         tournamentList.appendChild(li);
                     });
                 }
@@ -515,7 +517,10 @@
                         if (idx === data.index) {
                             item.classList.add('active');
                             item.classList.remove('done');
-                            item.querySelector('.status-icon').innerText = '▶';
+                            const link = item.querySelector('.tournament-link');
+                            if (link) {
+                                link.querySelector('.status-icon').innerText = '▶';
+                            }
                             
                             // Add cached label if applicable
                             if (data.cached && !item.querySelector('.cached-label')) {
@@ -529,7 +534,10 @@
                         } else if (item.classList.contains('active')) {
                             item.classList.remove('active');
                             item.classList.add('done');
-                            item.querySelector('.status-icon').innerText = '✓';
+                            const link = item.querySelector('.tournament-link');
+                            if (link) {
+                                link.querySelector('.status-icon').innerText = '✓';
+                            }
                         }
                     });
                 }

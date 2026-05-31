@@ -1,5 +1,6 @@
 """Scraper module for fetching FIDE player data from Lichess."""
 
+import json
 import os
 import re
 import time
