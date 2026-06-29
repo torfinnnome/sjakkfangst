@@ -61,5 +61,7 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:5000/ || exit 1
 
-# Run Flask application
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]
+# Run Flask application via gunicorn (threaded workers support long-lived SSE
+# connections and the parallel download pool). Long timeout for big fetches.
+CMD ["gunicorn", "--workers", "2", "--threads", "8", "--timeout", "600", \
+     "--bind", "0.0.0.0:5000", "app:app"]

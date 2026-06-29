@@ -5,8 +5,10 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, send_file, Response, render_template
 
 from scraper import parse_fide_url, get_broadcasts
@@ -21,6 +23,28 @@ url_logger = logging.getLogger("sjakkfangst.urls")
 url_logger.propagate = False
 
 app = Flask(__name__)
+
+# Parallel download configuration (env-configurable)
+DOWNLOAD_WORKERS = int(os.environ.get("DOWNLOAD_WORKERS", "3"))
+LICHESS_MIN_SPACING = float(os.environ.get("LICHESS_MIN_SPACING", "2"))
+
+# Shared rate limiter so concurrent download workers stay polite to Lichess.
+_lichess_lock = threading.Lock()
+_lichess_last_request = 0.0
+
+
+def _rate_limited_download(broadcast_url: str) -> str:
+    """Download a broadcast PGN, spacing out Lichess requests across workers."""
+    global _lichess_last_request
+    with _lichess_lock:
+        now = time.time()
+        wait = LICHESS_MIN_SPACING - (now - _lichess_last_request)
+        if wait < 0:
+            wait = 0
+        _lichess_last_request = now + wait
+    if wait > 0:
+        time.sleep(wait)
+    return download_broadcast_pgn(broadcast_url)
 
 
 @app.route("/", methods=["GET"])
@@ -61,7 +85,6 @@ def fetch_stream():
             return
 
         all_games = []
-        processed_tournaments = set()
         p_hits = 0
         t_hits = 0
         d_hits = 0
@@ -88,36 +111,32 @@ def fetch_stream():
         tournament_list = [{"name": b["name"], "url": b["url"]} for b in unique_broadcasts]
         yield f"data: {json.dumps({'tournaments': tournament_list, 'player_hash': player_hash})}\n\n"
 
+        completed = 0
+        to_download = []  # (index, broadcast, tournament_id) needing a network fetch
+
+        # First pass: serve cache hits immediately (in order), queue misses.
         for i, broadcast in enumerate(unique_broadcasts):
             name = broadcast["name"]
-            # Calculate progress: show at least 1% if we have tournaments
-            progress = int((i / total) * 100)
-            if progress == 0 and total > 0:
-                progress = 1
-
-            # Extract tournament_id from URL
             url_parts = broadcast["url"].rstrip("/").split("/")
             tournament_id = url_parts[-1] if len(url_parts) >= 5 else ""
 
-            # Check caches
             player_cached = get_cached_player(fide_id, tournament_id)
-            is_cached = player_cached is not None
-
             tournament_pgn = None
-            if not is_cached:
+            if player_cached is None:
                 tournament_pgn = get_cached_tournament(tournament_id)
-                is_cached = tournament_pgn is not None
-
-            # Send progress update with cached info
-            yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': is_cached, 'url': broadcast['url']})}\n\n"
 
             if player_cached:
-                if player_cached:
-                    p_hits += 1
-                    all_games.append(player_cached)
+                completed += 1
+                progress = max(1, int((completed / total) * 100)) if total else 100
+                yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': True, 'url': broadcast['url']})}\n\n"
+                p_hits += 1
+                all_games.append(player_cached)
                 continue
 
             if tournament_pgn:
+                completed += 1
+                progress = max(1, int((completed / total) * 100)) if total else 100
+                yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': True, 'url': broadcast['url']})}\n\n"
                 # Read tournament status from cache metadata to propagate to player cache
                 hash_key = _get_hash(tournament_id)
                 meta_path = _get_metadata_path("tournaments", hash_key)
@@ -127,7 +146,6 @@ def fetch_stream():
                     tournament_status = meta_data.get("status")
                 except Exception:
                     pass
-
                 filtered = filter_games_by_fide(tournament_pgn, fide_id, player_name)
                 if filtered:
                     cache_player(fide_id, tournament_id, filtered, tournament_status)
@@ -135,20 +153,35 @@ def fetch_stream():
                     all_games.append(filtered)
                 continue
 
-            # Respect Lichess rate limits (only if actually downloading)
-            if i > 0:
-                time.sleep(3)
+            # Not cached — queue for parallel download
+            to_download.append((i, broadcast, tournament_id))
 
-            pgn_text = download_broadcast_pgn(broadcast["url"])
-            if pgn_text:
-                # Cache full tournament PGN
-                cache_tournament(tournament_id, pgn_text, broadcast["url"])
-                # Pass player_name as fallback for filtering
-                filtered = filter_games_by_fide(pgn_text, fide_id, player_name)
-                cache_player(fide_id, tournament_id, filtered)
-                if filtered:
-                    d_hits += 1
-                    all_games.append(filtered)
+        # Second pass: download the uncached tournaments concurrently, with a
+        # shared rate limiter so we stay polite to Lichess. Events are emitted
+        # as downloads complete (out of order); the client keys off `index`.
+        if to_download:
+            with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as executor:
+                future_to_info = {
+                    executor.submit(_rate_limited_download, b["url"]): (i, b, tid)
+                    for (i, b, tid) in to_download
+                }
+                for future in as_completed(future_to_info):
+                    i, broadcast, tournament_id = future_to_info[future]
+                    name = broadcast["name"]
+                    try:
+                        pgn_text = future.result()
+                    except Exception:
+                        pgn_text = ""
+                    if pgn_text:
+                        cache_tournament(tournament_id, pgn_text, broadcast["url"])
+                        filtered = filter_games_by_fide(pgn_text, fide_id, player_name)
+                        cache_player(fide_id, tournament_id, filtered)
+                        if filtered:
+                            d_hits += 1
+                            all_games.append(filtered)
+                    completed += 1
+                    progress = max(1, int((completed / total) * 100)) if total else 100
+                    yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': False, 'url': broadcast['url']})}\n\n"
 
         if not all_games:
             yield f"data: {json.dumps({'error': 'No matching games found'})}\n\n"
@@ -160,7 +193,7 @@ def fetch_stream():
         filename = f"{player_name}_fide_games_sjakkfangst.pgn"
         cache_task(task_id, combined_pgn, filename)
 
-       # Collect opening stats for the player
+        # Collect opening stats for the player
         opening_result = collect_opening_stats(combined_pgn, fide_id)
 
         url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",

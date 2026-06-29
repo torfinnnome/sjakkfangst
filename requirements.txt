@@ -2,4 +2,5 @@ flask>=2.3.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
 python-chess>=1.999
+gunicorn>=21.2.0
 pytest>=7.4.0
