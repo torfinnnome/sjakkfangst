@@ -411,6 +411,13 @@
         let retryTimer = null;
         let fetchUrl = null;
 
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
         function startRateLimitCountdown(seconds) {
             submitBtn.disabled = true;
             let remaining = seconds;
@@ -500,7 +507,9 @@
                         const li = document.createElement('li');
                         li.className = 'tournament-item';
                         const href = t.url ? t.url + hash : '#';
-                        li.innerHTML = `<a href="${href}" target="_blank" rel="noopener" class="tournament-link" title="${t.name}"><span class="status-icon">○</span> <span class="tournament-name">${t.name}</span></a>`;
+                        const safeName = escapeHtml(t.name);
+                        const safeHref = escapeHtml(href);
+                        li.innerHTML = `<a href="${safeHref}" target="_blank" rel="noopener" class="tournament-link" title="${safeName}"><span class="status-icon">○</span> <span class="tournament-name">${safeName}</span></a>`;
                         tournamentList.appendChild(li);
                     });
                 }
@@ -624,8 +633,11 @@
             statsTableBody.innerHTML = '';
             data.forEach(s => {
                 const tr = document.createElement('tr');
+                const openingCell = s.opening === '?'
+                    ? '<td>Non-standard (i.e. Chess960)</td>'
+                    : `<td><a href="https://lichess.org/opening?q=${encodeURIComponent(s.opening)}" target="_blank" rel="noopener">${escapeHtml(s.opening)}</a></td>`;
                 tr.innerHTML =
-                    `${s.opening === '?' ? '<td>Non-standard (i.e. Chess960)</td>' : `<td><a href="https://lichess.org/opening?q=${encodeURIComponent(s.opening)}" target="_blank" rel="noopener">${s.opening}</a></td>`}` +
+                    openingCell +
                     `<td class="num">${s.games}</td>` +
                     `<td class="num">${s.whites}</td>` +
                     `<td class="num">${s.blacks}</td>` +
@@ -634,7 +646,7 @@
                     `<td class="num loss">${s.losses}</td>` +
                     `<td class="num">${s.win_pct}%</td>` +
                     `<td class="num">${s.avg_elo || '-'}</td>` +
-                    `<td class="eco-cell">${s.eco || '-'}</td>`;
+                    `<td class="eco-cell">${escapeHtml(s.eco || '-')}</td>`;
                 statsTableBody.appendChild(tr);
             });
         }
