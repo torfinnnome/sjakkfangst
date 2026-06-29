@@ -31,7 +31,7 @@ for arg in "$@"; do
             echo "  HOST_PORT          Port to expose (default: 5000)"
             echo "  MEMORY_LIMIT       Container memory limit (default: 512m)"
             echo "  HOST_CACHE_DIR     Cache directory path (default: ./cache)"
-            echo "  CACHE_TTL_HOURS    Cache TTL in hours (default: 24)"
+            echo "  CACHE_TTL_HOURS    Cache TTL in hours (default: 1)"
             echo "  SJAKKFANGST_LOG_URLS  Enable URL logging to stderr (set to 1)"
             exit 0
             ;;
