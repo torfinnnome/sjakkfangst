@@ -11,17 +11,16 @@ from flask import Flask, request, send_file, Response, render_template
 
 from scraper import parse_fide_url, get_broadcasts
 from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
-from cache import get_cached_player, cache_player, get_cached_tournament, cache_tournament, _get_hash, _get_metadata_path
+from cache import (
+    get_cached_player, cache_player, get_cached_tournament, cache_tournament,
+    _get_hash, _get_metadata_path, cache_task, get_cached_task,
+)
 from rate_limit import rate_limiter
 
 url_logger = logging.getLogger("sjakkfangst.urls")
 url_logger.propagate = False
 
 app = Flask(__name__)
-
-# Simple in-memory cache for task results
-# In a production app, this would be a database or Redis
-tasks = {}
 
 
 @app.route("/", methods=["GET"])
@@ -158,10 +157,8 @@ def fetch_stream():
         # Success! Store result and notify client
         task_id = str(uuid.uuid4())
         combined_pgn = "\n\n".join(all_games)
-        tasks[task_id] = {
-            "pgn": combined_pgn,
-            "filename": f"{player_name}_fide_games_sjakkfangst.pgn",
-        }
+        filename = f"{player_name}_fide_games_sjakkfangst.pgn"
+        cache_task(task_id, combined_pgn, filename)
 
        # Collect opening stats for the player
         opening_result = collect_opening_stats(combined_pgn, fide_id)
@@ -181,7 +178,7 @@ def fetch_stream():
 @app.route("/download/<task_id>")
 def download(task_id):
     """Download the final PGN file for a completed task."""
-    task = tasks.get(task_id)
+    task = get_cached_task(task_id)
     if not task:
         return "Task not found or expired", 404
 

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 CACHE_DIR = os.environ.get("CACHE_DIR", "/cache")
 CACHE_TTL_HOURS = int(os.environ.get("CACHE_TTL_HOURS", "1"))
 CACHE_COMPLETED_DAYS = int(os.environ.get("CACHE_COMPLETED_DAYS", "5"))
+TASK_TTL_HOURS = int(os.environ.get("TASK_TTL_HOURS", "1"))
 
 
 def _get_hash(key: str) -> str:
@@ -256,3 +257,68 @@ def cache_player(fide_id: str, tournament_id: str, pgn_text: str, status: Option
         meta_path.write_text(json.dumps(metadata))
     except (OSError, IOError) as e:
         logger.error(f"Failed to write to cache: {e}")
+
+
+def cache_task(task_id: str, pgn_text: str, filename: str) -> None:
+    """Persist a completed fetch task so its result can be downloaded later.
+
+    Task results are short-lived (TASK_TTL_HOURS) and stored on disk so any
+    worker process can serve the download, unblocking horizontal scaling and
+    avoiding unbounded in-memory growth.
+
+    Args:
+        task_id: Unique task identifier (e.g. a UUID).
+        pgn_text: Combined PGN text for download.
+        filename: Download filename to present to the client.
+    """
+    try:
+        hash_key = _get_hash(task_id)
+        pgn_path = _get_pgn_path("tasks", hash_key)
+        meta_path = _get_metadata_path("tasks", hash_key)
+
+        pgn_path.parent.mkdir(parents=True, exist_ok=True)
+        pgn_path.write_text(pgn_text)
+
+        metadata = {
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+            "task_id": task_id,
+            "filename": filename,
+        }
+        meta_path.write_text(json.dumps(metadata))
+    except (OSError, IOError) as e:
+        logger.error(f"Failed to write task to cache: {e}")
+
+
+def get_cached_task(task_id: str) -> Optional[dict]:
+    """Retrieve a persisted fetch task for download.
+
+    Args:
+        task_id: Unique task identifier.
+
+    Returns:
+        Dict with 'pgn' and 'filename' keys if found and not expired,
+        None otherwise. Expired entries are deleted.
+    """
+    hash_key = _get_hash(task_id)
+    meta_path = _get_metadata_path("tasks", hash_key)
+    pgn_path = _get_pgn_path("tasks", hash_key)
+
+    if not meta_path.exists() or not pgn_path.exists():
+        return None
+
+    try:
+        metadata = json.loads(meta_path.read_text())
+        pgn_text = pgn_path.read_text()
+
+        cached_at = datetime.fromisoformat(metadata["cached_at"])
+        if cached_at.tzinfo is None:
+            cached_at = cached_at.replace(tzinfo=timezone.utc)
+
+        if datetime.now(timezone.utc) - cached_at > timedelta(hours=TASK_TTL_HOURS):
+            _cleanup_expired("tasks", hash_key)
+            return None
+
+        return {"pgn": pgn_text, "filename": metadata.get("filename", "games.pgn")}
+    except (json.JSONDecodeError, IOError, KeyError):
+        _cleanup_expired("tasks", hash_key)
+        return None

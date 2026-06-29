@@ -37,7 +37,7 @@ RUN adduser -D -u 1000 appuser
 WORKDIR /app
 
 # Create cache directory with proper permissions
-RUN mkdir -p /cache/tournaments /cache/players && \
+RUN mkdir -p /cache/tournaments /cache/players /cache/tasks && \
     chown -R appuser:appuser /cache
 
 # Environment variables for cache configuration
