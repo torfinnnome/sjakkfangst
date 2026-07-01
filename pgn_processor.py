@@ -789,6 +789,79 @@ def collect_opening_stats(pgn_text, fide_id):
     return {"stats": result_list, "player_name": player_name or ""}
 
 
+def _make_tree_node():
+    return {
+        "games": 0, "wins": 0, "draws": 0, "losses": 0,
+        "whites": 0, "blacks": 0,
+        "white_wins": 0, "white_draws": 0, "white_losses": 0,
+        "black_wins": 0, "black_draws": 0, "black_losses": 0,
+        "children": {},
+    }
+
+
+def _accumulate_node(node, outcome, is_white):
+    node["games"] += 1
+    node["wins" if outcome == "W" else "draws" if outcome == "D" else "losses"] += 1
+    color = "white" if is_white else "black"
+    node[color + "s"] += 1
+    node[color + "_" + ("wins" if outcome == "W" else "draws" if outcome == "D" else "losses")] += 1
+
+
+def _sort_tree_children(node):
+    node["children"] = dict(sorted(node["children"].items(), key=lambda x: x[1]["games"], reverse=True))
+    for child in node["children"].values():
+        _sort_tree_children(child)
+
+
+def build_opening_tree(pgn_text, fide_id):
+    """Build move trees for each opening. Returns list sorted by games desc."""
+    if not pgn_text:
+        return []
+    openings = {}
+    stream = io.StringIO(pgn_text)
+    while True:
+        try:
+            game = chess.pgn.read_game(stream)
+            if game is None:
+                break
+            headers = game.headers
+            wf = headers.get("WhiteFideId", "")
+            bf = headers.get("BlackFideId", "")
+            if wf != fide_id and bf != fide_id:
+                continue
+            is_white = wf == fide_id
+            result = headers.get("Result", "*")
+            outcome = ("W" if result == "1-0" else "L" if result == "0-1" else "D") if is_white else ("W" if result == "0-1" else "L" if result == "1-0" else "D")
+            eco = headers.get("ECO", "")
+            opening = headers.get("Opening", "") or _get_eco_openings().get(eco, f"ECO {eco}") if eco else "Unknown"
+            key = (opening, eco)
+            if key not in openings:
+                node = _make_tree_node()
+                node["opening"] = opening
+                node["eco"] = eco
+                openings[key] = node
+            tree = openings[key]
+            _accumulate_node(tree, outcome, is_white)
+            board = chess.Board()
+            node = game.next()
+            depth = 0
+            while node is not None and depth < TREE_DEPTH:
+                san = board.san(node.move)
+                if san not in tree["children"]:
+                    tree["children"][san] = _make_tree_node()
+                tree = tree["children"][san]
+                _accumulate_node(tree, outcome, is_white)
+                board.push(node.move)
+                node = node.next()
+                depth += 1
+        except Exception:
+            continue
+    result = sorted(openings.values(), key=lambda x: x["games"], reverse=True)
+    for entry in result:
+        _sort_tree_children(entry)
+    return result
+
+
 def _merge_raw_stats(all_stats):
     """Merge multiple raw stats dicts into one, accumulating counts."""
     merged = {}

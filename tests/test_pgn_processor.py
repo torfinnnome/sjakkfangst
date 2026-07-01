@@ -531,10 +531,17 @@ class TestBuildOpeningTree:
 
     def test_basic_tree(self):
         """Single game, verify tree structure and children dict."""
-        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
-[White "A"][Black "B"][Result "1-0"]
-[WhiteFideId "1234567"][BlackFideId "7654321"]
-[ECO "C65"][Opening "Ruy Lopez"]
+        pgn = """[Event "T1"]
+[Site "?"]
+[Date "2024.01.01"]
+[Round "?"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteFideId "1234567"]
+[BlackFideId "7654321"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 e5 2. Nf3 Nc6 1-0"""
         result = build_opening_tree(pgn, "1234567")
@@ -550,17 +557,31 @@ class TestBuildOpeningTree:
 
     def test_accumulation(self):
         """Two games same opening, verify games/wins/whites/blacks accumulate."""
-        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
-[White "A"][Black "B"][Result "1-0"]
-[WhiteFideId "1234567"][BlackFideId "7654321"]
-[ECO "C65"][Opening "Ruy Lopez"]
+        pgn = """[Event "T1"]
+[Site "?"]
+[Date "2024.01.01"]
+[Round "?"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteFideId "1234567"]
+[BlackFideId "7654321"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 e5 1-0
 
-[Event "T2"][Site "?"][Date "2024.01.02"][Round "?"]
-[White "A"][Black "C"][Result "1/2-1/2"]
-[WhiteFideId "1234567"][BlackFideId "1111111"]
-[ECO "C65"][Opening "Ruy Lopez"]
+[Event "T2"]
+[Site "?"]
+[Date "2024.01.02"]
+[Round "?"]
+[White "A"]
+[Black "C"]
+[Result "1/2-1/2"]
+[WhiteFideId "1234567"]
+[BlackFideId "1111111"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 e5 1/2-1/2"""
         result = build_opening_tree(pgn, "1234567")
@@ -574,17 +595,31 @@ class TestBuildOpeningTree:
 
     def test_per_color_breakdown(self):
         """White wins as white, black loses as black."""
-        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
-[White "A"][Black "B"][Result "1-0"]
-[WhiteFideId "1234567"][BlackFideId "7654321"]
-[ECO "C65"][Opening "Ruy Lopez"]
+        pgn = """[Event "T1"]
+[Site "?"]
+[Date "2024.01.01"]
+[Round "?"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteFideId "1234567"]
+[BlackFideId "7654321"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 e5 1-0
 
-[Event "T2"][Site "?"][Date "2024.01.02"][Round "?"]
-[White "C"][Black "A"][Result "1-0"]
-[WhiteFideId "1111111"][BlackFideId "1234567"]
-[ECO "C65"][Opening "Ruy Lopez"]
+[Event "T2"]
+[Site "?"]
+[Date "2024.01.02"]
+[Round "?"]
+[White "C"]
+[Black "A"]
+[Result "1-0"]
+[WhiteFideId "1111111"]
+[BlackFideId "1234567"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 e5 1-0"""
         result = build_opening_tree(pgn, "1234567")
@@ -596,10 +631,17 @@ class TestBuildOpeningTree:
 
     def test_depth_limit(self):
         """Game with 10+ plies, assert tree depth <= TREE_DEPTH (6)."""
-        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
-[White "A"][Black "B"][Result "1-0"]
-[WhiteFideId "1234567"][BlackFideId "7654321"]
-[ECO "C65"][Opening "Ruy Lopez"]
+        pgn = """[Event "T1"]
+[Site "?"]
+[Date "2024.01.01"]
+[Round "?"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteFideId "1234567"]
+[BlackFideId "7654321"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 1-0"""
         result = build_opening_tree(pgn, "1234567")
@@ -614,10 +656,17 @@ class TestBuildOpeningTree:
 
     def test_short_game(self):
         """1 move game, tree stops gracefully."""
-        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
-[White "A"][Black "B"][Result "1-0"]
-[WhiteFideId "1234567"][BlackFideId "7654321"]
-[ECO "C65"][Opening "Ruy Lopez"]
+        pgn = """[Event "T1"]
+[Site "?"]
+[Date "2024.01.01"]
+[Round "?"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteFideId "1234567"]
+[BlackFideId "7654321"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 1-0"""
         result = build_opening_tree(pgn, "1234567")
@@ -630,10 +679,17 @@ class TestBuildOpeningTree:
 
     def test_non_matching_fide(self):
         """Different FIDE returns []."""
-        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
-[White "A"][Black "B"][Result "1-0"]
-[WhiteFideId "1111111"][BlackFideId "2222222"]
-[ECO "C65"][Opening "Ruy Lopez"]
+        pgn = """[Event "T1"]
+[Site "?"]
+[Date "2024.01.01"]
+[Round "?"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteFideId "1111111"]
+[BlackFideId "2222222"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
 
 1. e4 e5 1-0"""
         assert build_opening_tree(pgn, "9999999") == []
