@@ -317,7 +317,16 @@ def search_fide_players(query: str) -> list:
         })
 
     query_lower = query.lower()
-    return [r for r in results if query_lower in r["name"].lower() or query_lower in r["fide_id"]]
+    results = [r for r in results if query_lower in r["name"].lower() or query_lower in r["fide_id"]]
+
+    # Deduplicate by FIDE ID (keep first occurrence), cap at 10
+    seen = set()
+    deduped = []
+    for r in results:
+        if r["fide_id"] not in seen:
+            seen.add(r["fide_id"])
+            deduped.append(r)
+    return deduped[:10]
 
 
 @app.route("/search", methods=["GET"])
