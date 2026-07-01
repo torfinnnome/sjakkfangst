@@ -196,8 +196,8 @@ class TestCollectOpeningStats:
 
     def test_empty_pgn_returns_empty_list(self):
         """Test that empty PGN returns empty list."""
-        assert collect_opening_stats("", "1503014") == []
-        assert collect_opening_stats(None, "1503014") == []
+        assert collect_opening_stats("", "1503014") == {"stats": [], "player_name": ""}
+        assert collect_opening_stats(None, "1503014") == {"stats": [], "player_name": ""}
 
     def test_basic_stats_collection_as_white(self):
         """Test basic stats collection for player as White."""
@@ -524,6 +524,27 @@ class TestCollectOpeningStats:
 
         assert len(stats) == 1
         assert stats[0]["avg_elo"] is None
+
+    def test_collect_stats_includes_tree(self):
+        pgn = """[Event "T1"]
+[Site "?"]
+[Date "2024.01.01"]
+[Round "?"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteFideId "1234567"]
+[BlackFideId "7654321"]
+[ECO "C65"]
+[Opening "Ruy Lopez"]
+
+1. e4 e5 1-0"""
+        from pgn_processor import collect_opening_stats
+        result = collect_opening_stats(pgn, "1234567")
+        assert "stats" in result
+        assert len(result["stats"]) == 1
+        assert "tree" in result["stats"][0]
+        assert "children" in result["stats"][0]["tree"]
 
 
 class TestBuildOpeningTree:

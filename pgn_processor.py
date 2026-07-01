@@ -660,7 +660,7 @@ def collect_opening_stats(pgn_text, fide_id):
     Stats sorted by games descending.
     """
     if not pgn_text:
-        return []
+        return {"stats": [], "player_name": ""}
 
     stats = {}
     stream = io.StringIO(pgn_text)
@@ -786,6 +786,10 @@ def collect_opening_stats(pgn_text, fide_id):
         )
 
     result_list.sort(key=lambda x: x["games"], reverse=True)
+    tree_results = build_opening_tree(pgn_text, fide_id)
+    tree_by_key = {(e["opening"], e["eco"]): e for e in tree_results}
+    for entry in result_list:
+        entry["tree"] = tree_by_key.get((entry["opening"], entry["eco"]), {})
     return {"stats": result_list, "player_name": player_name or ""}
 
 
