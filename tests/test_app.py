@@ -270,15 +270,9 @@ class TestSearchEndpoint:
         monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
 
         mock_html = """
-        <div class="player-search-result">
-          <a href="/fide/1503014/MagnusCarlsen" class="player-search-result__link">
-            <span class="player-intro__name">Carlsen, Magnus</span>
-          </a>
-        </div>
-        <div class="player-search-result">
-          <a href="/fide/1001234/HikaruNakamura" class="player-search-result__link">
-            <span class="player-intro__name">Nakamura, Hikaru</span>
-          </a>
+        <div class="fide-players-table">
+          <a href="/fide/1503014/MagnusCarlsen" class="player-intro__name">Carlsen, Magnus</a>
+          <a href="/fide/1001234/HikaruNakamura" class="player-intro__name">Nakamura, Hikaru</a>
         </div>
         """
 
@@ -310,7 +304,7 @@ class TestSearchEndpoint:
     def test_rate_limiting_returns_429(self, client, temp_cache_dir, monkeypatch):
         monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
 
-        mock_html = '<div class="player-search-result"><a href="/fide/1/x"><span class="player-intro__name">A</span></a></div>'
+        mock_html = '<div class="fide-players-table"><a href="/fide/1/x" class="player-intro__name">A</a></div>'
         mock_response = requests_lib.Response()
         mock_response._content = mock_html.encode()
         mock_response.status_code = 200

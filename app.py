@@ -295,12 +295,11 @@ def search_fide_players(query: str) -> list:
     soup = BeautifulSoup(response.text, "html.parser")
 
     results = []
-    for item in soup.find_all("div", class_="player-search-result"):
-        link = item.find("a", class_="player-search-result__link", href=True)
-        name_span = item.find("span", class_="player-intro__name")
-        if not link or not name_span:
-            continue
+    table = soup.select_one(".fide-players-table")
+    if not table:
+        return results
 
+    for link in table.select("a.player-intro__name[href]"):
         href = link["href"]
         match = re.match(r"^/fide/(\d+)/(\S+)$", href)
         if not match:
@@ -308,7 +307,13 @@ def search_fide_players(query: str) -> list:
 
         fide_id = match.group(1)
         slug = match.group(2)
-        name = name_span.get_text(strip=True)
+
+        # Extract name, stripping title prefix (e.g. "GM", "FM")
+        title_span = link.select_one(".utitle")
+        if title_span:
+            name = link.get_text(strip=True).replace(title_span.get_text(strip=True), "", 1).strip()
+        else:
+            name = link.get_text(strip=True)
 
         results.append({
             "fide_id": fide_id,
