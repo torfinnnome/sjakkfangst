@@ -340,3 +340,46 @@ def get_cached_task(task_id: str) -> Optional[dict]:
     except (json.JSONDecodeError, IOError, KeyError):
         _cleanup_expired("tasks", hash_key)
         return None
+
+
+def get_cached_search(query: str) -> Optional[list]:
+    """Get cached search results for a player name query.
+
+    Search results are cached permanently (no TTL) since FIDE player data
+    changes infrequently.
+
+    Args:
+        query: The search query string (case-insensitive).
+
+    Returns:
+        Cached list of player dicts if found, None otherwise.
+    """
+    hash_key = hashlib.md5(query.lower().encode()).hexdigest()[:16]
+    search_dir = Path(CACHE_DIR) / "search"
+    json_path = search_dir / f"{hash_key}.json"
+
+    if not json_path.exists():
+        return None
+
+    try:
+        return json.loads(json_path.read_text())
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def cache_search(query: str, results: list) -> None:
+    """Cache search results for a player name query.
+
+    Args:
+        query: The search query string.
+        results: List of player dicts with 'fide_id', 'name', 'slug' keys.
+    """
+    try:
+        hash_key = hashlib.md5(query.lower().encode()).hexdigest()[:16]
+        search_dir = Path(CACHE_DIR) / "search"
+        json_path = search_dir / f"{hash_key}.json"
+
+        search_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write(json_path, json.dumps(results))
+    except (OSError, IOError) as e:
+        logger.error(f"Failed to write search cache: {e}")

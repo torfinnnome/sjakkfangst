@@ -190,3 +190,27 @@ class TestDownload:
         r = client.get("/download/roundtrip")
         assert r.status_code == 200
         assert b"1. e4 e5" in r.data
+
+
+class TestSearchCache:
+    def test_get_cached_search_miss(self, temp_cache_dir):
+        assert cache.get_cached_search("carlsen") is None
+
+    def test_round_trip(self, temp_cache_dir):
+        results = [
+            {"fide_id": "1503014", "name": "Carlsen, Magnus", "slug": "MagnusCarlsen"},
+            {"fide_id": "1001234", "name": "Carlsen, John", "slug": "JohnCarlsen"},
+        ]
+        cache.cache_search("carlsen", results)
+        cached = cache.get_cached_search("carlsen")
+        assert cached is not None
+        assert len(cached) == 2
+        assert cached[0]["fide_id"] == "1503014"
+
+    def test_cache_is_permanent(self, temp_cache_dir, monkeypatch):
+        results = [{"fide_id": "1503014", "name": "Carlsen, Magnus", "slug": "MagnusCarlsen"}]
+        cache.cache_search("carlsen", results)
+        monkeypatch.setattr(cache, "CACHE_TTL_HOURS", 0)
+        cached = cache.get_cached_search("carlsen")
+        assert cached is not None
+        assert len(cached) == 1
