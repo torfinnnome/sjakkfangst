@@ -8,6 +8,8 @@ from typing import Optional, Tuple
 MAX_REQUESTS_PER_IP = 2  # per minute per client
 MAX_REQUESTS_GLOBAL = 6  # per minute across all clients
 WINDOW_SECONDS = 60
+SEARCH_MAX_REQUESTS = 1  # per 5s per client (search only)
+SEARCH_WINDOW_SECONDS = 5
 
 
 class RateLimiter:
@@ -59,10 +61,6 @@ class RateLimiter:
 
 # Singleton
 rate_limiter = RateLimiter()
-
-
-SEARCH_MAX_REQUESTS = 1
-SEARCH_WINDOW_SECONDS = 5
 
 
 class SearchRateLimiter:
