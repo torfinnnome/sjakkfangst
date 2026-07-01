@@ -69,5 +69,23 @@ else
     exit 1
 fi
 
+# Check security response headers
+HEADERS=$(podman exec "$CONTAINER_NAME" wget -qO- -S http://localhost:5000/ 2>&1)
+
+check_header() {
+    local header="$1"
+    if echo "$HEADERS" | grep -qi "$header"; then
+        echo "✓ PASS: $header header present"
+    else
+        echo "✗ FAIL: $header header missing"
+        exit 1
+    fi
+}
+
+check_header "Content-Security-Policy"
+check_header "X-Content-Type-Options"
+check_header "X-Frame-Options"
+check_header "Referrer-Policy"
+
 echo ""
 echo "=== All security checks passed ==="

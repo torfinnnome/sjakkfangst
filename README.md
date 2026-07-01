@@ -98,6 +98,8 @@ When enabled, each fetch request produces a single line of output:
 
 The counters indicate: `p` = player cache hit, `t` = tournament cache hit, `d` = downloaded.
 
+**Privacy note:** When enabled, logs contain FIDE IDs and player names (semi-public data from Lichess). Ensure stderr/journald access is restricted appropriately.
+
 Enable with Podman:
 ```bash
 SJAKKFANGST_LOG_URLS=1 ./run-rootless.sh
