@@ -36,9 +36,9 @@ RUN adduser -D -u 1000 appuser
 # Set working directory
 WORKDIR /app
 
-# Create cache directory with proper permissions
-RUN mkdir -p /cache/tournaments /cache/players /cache/tasks && \
-    chown -R appuser:appuser /cache
+# Create cache and writable home directories
+RUN mkdir -p /cache/tournaments /cache/players /cache/tasks /home/appuser/.gunicorn && \
+    chown -R appuser:appuser /cache /home/appuser
 
 # Environment variables for cache configuration
 ENV CACHE_DIR=/cache \

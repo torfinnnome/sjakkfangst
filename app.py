@@ -14,11 +14,8 @@ from flask import Flask, request, send_file, Response, render_template
 from scraper import parse_fide_url, get_broadcasts
 from pgn_processor import (
     download_broadcast_pgn,
-    filter_and_collect_stats,
     filter_games_by_fide,  # kept for test mocking compatibility
     collect_opening_stats,
-    _merge_raw_stats,
-    _format_raw_stats,
 )
 from cache import (
     get_cached_player, cache_player, get_cached_tournament, cache_tournament,
@@ -132,8 +129,6 @@ def fetch_stream():
             return
 
         all_games = []
-        all_raw_stats = []
-        all_player_names = []
         p_hits = 0
         t_hits = 0
         d_hits = 0
@@ -195,14 +190,11 @@ def fetch_stream():
                     tournament_status = meta_data.get("status")
                 except Exception:
                     pass
-                res = filter_and_collect_stats(tournament_pgn, fide_id, player_name)
-                if res["filtered_pgn"]:
-                    cache_player(fide_id, tournament_id, res["filtered_pgn"], tournament_status)
+                filtered = filter_games_by_fide(tournament_pgn, fide_id, player_name)
+                if filtered:
+                    cache_player(fide_id, tournament_id, filtered, tournament_status)
                     t_hits += 1
-                    all_games.append(res["filtered_pgn"])
-                    all_raw_stats.append(res["stats"])
-                    if res["player_name"]:
-                        all_player_names.append(res["player_name"])
+                    all_games.append(filtered)
                 continue
 
             # Not cached — queue for parallel download
@@ -230,14 +222,11 @@ def fetch_stream():
                         pgn_text = ""
                     if pgn_text:
                         cache_tournament(tournament_id, pgn_text, broadcast["url"])
-                        res = filter_and_collect_stats(pgn_text, fide_id, player_name)
-                        if res["filtered_pgn"]:
-                            cache_player(fide_id, tournament_id, res["filtered_pgn"])
+                        filtered = filter_games_by_fide(pgn_text, fide_id, player_name)
+                        if filtered:
+                            cache_player(fide_id, tournament_id, filtered)
                             d_hits += 1
-                            all_games.append(res["filtered_pgn"])
-                            all_raw_stats.append(res["stats"])
-                            if res["player_name"]:
-                                all_player_names.append(res["player_name"])
+                            all_games.append(filtered)
                     completed += 1
                     progress = max(1, int((completed / total) * 100)) if total else 100
                     yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': False, 'url': broadcast['url']})}\n\n"
@@ -253,12 +242,9 @@ def fetch_stream():
         cache_task(task_id, combined_pgn, filename)
 
         # Collect opening stats for the player
-        merged = _merge_raw_stats(all_raw_stats)
-        final_stats = _format_raw_stats(merged)
-        player_name_resolved = all_player_names[0] if all_player_names else ""
-        if not player_name_resolved:
-            opening_result = collect_opening_stats(combined_pgn, fide_id)
-            player_name_resolved = opening_result.get("player_name", "")
+        opening_result = collect_opening_stats(combined_pgn, fide_id)
+        final_stats = opening_result["stats"]
+        player_name_resolved = opening_result.get("player_name", "")
 
         url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
                         url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
