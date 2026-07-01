@@ -19,6 +19,9 @@ CACHE_TTL_HOURS = int(os.environ.get("CACHE_TTL_HOURS", "1"))
 CACHE_COMPLETED_DAYS = int(os.environ.get("CACHE_COMPLETED_DAYS", "5"))
 TASK_TTL_HOURS = int(os.environ.get("TASK_TTL_HOURS", "1"))
 
+# Precompiled date-header regex (P6).
+_DATE_RE = re.compile(r'\[Date "(\d{4})[.\-](\d{2})[.\-](\d{2})"\]')
+
 
 def _get_hash(key: str) -> str:
     """Generate SHA256 hash of key, truncated to 16 hex chars."""
@@ -45,10 +48,9 @@ def _parse_tournament_end_date(pgn_text: str) -> Optional[datetime]:
         Latest date found in PGN headers, or None if not found.
     """
     # Look for Date headers in format [Date "YYYY.MM.DD"] or [Date "YYYY-MM-DD"]
-    date_pattern = r'\[Date "(\d{4})[.\-](\d{2})[.\-](\d{2})"\]'
     dates = []
 
-    for match in re.finditer(date_pattern, pgn_text):
+    for match in _DATE_RE.finditer(pgn_text):
         try:
             year, month, day = (
                 int(match.group(1)),

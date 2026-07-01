@@ -1,32 +1,17 @@
 """PGN processor module for downloading PGN files from broadcasts."""
 
 import io
-import os
 import re
-import time
 
 import chess.pgn
 import requests
 
 from cache import get_cached_tournament, cache_tournament
+from http_client import fetch_with_retry
 
-RETRY_ATTEMPTS = int(os.environ.get("RETRY_ATTEMPTS", "3"))
-RETRY_DELAY = int(os.environ.get("RETRY_DELAY", "2"))
-
-
-def _fetch_with_retry(url: str, timeout: int = 30) -> requests.Response:
-    """Fetch a URL with retry logic for transient errors."""
-    last_exception = None
-    for attempt in range(RETRY_ATTEMPTS):
-        try:
-            response = requests.get(url, timeout=timeout)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as exc:
-            last_exception = exc
-            if attempt < RETRY_ATTEMPTS - 1:
-                time.sleep(RETRY_DELAY)
-    raise last_exception
+# Precompiled regexes (P6).
+_TOUR_ID_RE = re.compile(r'"tour":\{"id":"([^"]+)"')
+_TOURNAMENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 # ECO code to opening name lookup (from Lichess chess-openings dataset, CC0)
 ECO_OPENINGS: dict[str, str] = {
@@ -547,10 +532,10 @@ def download_broadcast_pgn(broadcast_url: str) -> str:
     """
     try:
         # Fetch the broadcast page to find the actual tournament ID
-        page_response = _fetch_with_retry(broadcast_url, timeout=30)
+        page_response = fetch_with_retry(broadcast_url, timeout=30)
 
         # The tournament ID is inside the page-init-data JSON in the HTML
-        match = re.search(r'"tour":\{"id":"([^"]+)"', page_response.text)
+        match = _TOUR_ID_RE.search(page_response.text)
         if match:
             tournament_id = match.group(1)
         else:
@@ -560,7 +545,7 @@ def download_broadcast_pgn(broadcast_url: str) -> str:
 
         # Validate tournament_id before constructing an API URL (S5).
         # Lichess IDs are alphanumeric with hyphens/underscores only.
-        if not re.match(r"^[A-Za-z0-9_-]+$", tournament_id):
+        if not _TOURNAMENT_ID_RE.match(tournament_id):
             return ""
 
         # Check cache first
@@ -570,7 +555,7 @@ def download_broadcast_pgn(broadcast_url: str) -> str:
 
         # Construct API URL and fetch
         api_url = f"https://lichess.org/api/broadcast/{tournament_id}.pgn"
-        response = _fetch_with_retry(api_url, timeout=30)
+        response = fetch_with_retry(api_url, timeout=30)
         pgn_text = response.text
 
         # Cache the result

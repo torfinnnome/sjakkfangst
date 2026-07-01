@@ -9,7 +9,7 @@ from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_
 class TestDownloadBroadcastPgn:
     """Tests for download_broadcast_pgn function."""
 
-    @patch("pgn_processor.requests.get")
+    @patch("http_client._session.get")
     def test_valid_broadcast_url_returns_pgn_text(self, mock_get):
         """Test that valid broadcast URL returns PGN text by extracting tournament ID."""
         # First call: fetch broadcast page
@@ -37,12 +37,13 @@ class TestDownloadBroadcastPgn:
             "https://lichess.org/api/broadcast/EdFRduLb.pgn", timeout=30
         )
 
-    @patch("pgn_processor.requests.get")
+    @patch("http_client._session.get")
     def test_http_error_returns_empty_string(self, mock_get):
         """Test that HTTP error returns empty string."""
         from requests import HTTPError
 
         mock_response = Mock()
+        mock_response.status_code = 404
         mock_response.raise_for_status.side_effect = HTTPError("404 Not Found")
         mock_get.return_value = mock_response
 
@@ -51,7 +52,7 @@ class TestDownloadBroadcastPgn:
 
         assert result == ""
 
-    @patch("pgn_processor.requests.get")
+    @patch("http_client._session.get")
     def test_request_exception_returns_empty_string(self, mock_get):
         """Test that request exception returns empty string."""
         from requests import RequestException

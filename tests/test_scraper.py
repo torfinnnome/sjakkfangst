@@ -69,7 +69,7 @@ def test_parse_fide_url_uppercase_and_trailing_slash():
 class TestGetBroadcasts:
     """Tests for get_broadcasts function."""
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_valid_fide_id_returns_broadcast_urls(self, mock_get):
         """Test that valid FIDE ID returns list of broadcast URLs."""
         mock_response = Mock()
@@ -96,7 +96,7 @@ class TestGetBroadcasts:
             "https://lichess.org/fide/1503014/Carlsen_Magnus", timeout=30
         )
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_section_tag_returns_broadcast_urls(self, mock_get):
         """Test that relay-cards in a section tag also works."""
         mock_response = Mock()
@@ -118,7 +118,7 @@ class TestGetBroadcasts:
             {"url": "https://lichess.org/broadcast/norwegian-championship-2025/round-1/xyz", "name": "Unknown Tournament"}
         ]
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_no_broadcasts_returns_empty_list(self, mock_get):
         """Test that HTML with no broadcasts returns empty list."""
         mock_response = Mock()
@@ -137,7 +137,7 @@ class TestGetBroadcasts:
 
         assert result == []
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_no_relay_cards_section_returns_empty_list(self, mock_get):
         """Test that HTML without relay-cards section returns empty list."""
         mock_response = Mock()
@@ -155,7 +155,7 @@ class TestGetBroadcasts:
 
         assert result == []
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_http_error_returns_empty_list(self, mock_get):
         """Test that HTTP errors are handled gracefully with empty list."""
         from requests import HTTPError
@@ -166,7 +166,7 @@ class TestGetBroadcasts:
 
         assert result == []
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_request_exception_returns_empty_list(self, mock_get):
         """Test that request exceptions are handled gracefully."""
         from requests import RequestException
@@ -177,7 +177,7 @@ class TestGetBroadcasts:
 
         assert result == []
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_pagination_fetches_next_page(self, mock_get):
         """Test that pagination follows next page link."""
         page1 = """
@@ -209,7 +209,7 @@ class TestGetBroadcasts:
         ]
         assert mock_get.call_count == 2
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_max_broadcasts_limits_results(self, mock_get):
         """Test that max_broadcasts parameter limits the number of results."""
         page1 = """
@@ -241,7 +241,7 @@ class TestGetBroadcasts:
         assert result[1]["name"] == "T2"
         assert mock_get.call_count == 1  # Should not fetch page 2
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_pagination_deduplicates_broadcasts(self, mock_get):
         """Test that duplicate broadcasts across pages are removed."""
         page1 = """
@@ -272,7 +272,7 @@ class TestGetBroadcasts:
         assert result[0]["name"] == "Tournament 1"
         assert result[1]["name"] == "Tournament 2"
 
-    @patch("scraper.requests.get")
+    @patch("http_client._session.get")
     def test_pagination_stops_when_no_next_page(self, mock_get):
         """Test that pagination stops when there's no pager link."""
         page1 = """
