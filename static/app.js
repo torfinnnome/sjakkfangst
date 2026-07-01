@@ -239,6 +239,11 @@ function renderStats(stats, playerName) {
     statsContainer.open = true;
 }
 
+const TREE_TOP_N = 5;
+function _cwr(n,c){var w=c==="w"?n.white_wins:n.black_wins,t=c==="w"?n.whites:n.blacks;return t>0?Math.round(w/t*100)+"%":"-";}
+function _tn(m,n){var s=document.createElement('span');s.className='tree-node';var ms=document.createElement('span');ms.className='tree-move';ms.textContent=m;s.appendChild(ms);var st=document.createElement('span');st.className='tree-stats';var wr=n.games>0?Math.round(n.wins/n.games*100)+"%":"-";st.textContent="("+n.games+", "+wr+", \u25A1:"+_cwr(n,"w")+"\u25A0:"+_cwr(n,"b")+")";s.appendChild(st);return s;}
+function renderTree(tree){if(!tree||!tree.children)return document.createTextNode('No moves');var ul=document.createElement('ul');ul.className='tree-level';var e=Object.entries(tree.children);for(var i=0;i<TREE_TOP_N&&i<e.length;i++){var li=document.createElement('li');li.appendChild(_tn(e[i][0],e[i][1]));if(e[i][1].children&&Object.keys(e[i][1].children).length>0)li.appendChild(renderTree(e[i][1]));ul.appendChild(li);}if(e.length>TREE_TOP_N){var co=document.createElement('li'),d=document.createElement('details');d.className='tree-collapsed';var su=document.createElement('summary');su.textContent="... and "+(e.length-TREE_TOP_N)+" more";d.appendChild(su);var su2=document.createElement('ul');su2.className='tree-level';for(var j=TREE_TOP_N;j<e.length;j++){var li2=document.createElement('li');li2.appendChild(_tn(e[j][0],e[j][1]));if(e[j][1].children&&Object.keys(e[j][1].children).length>0)li2.appendChild(renderTree(e[j][1]));su2.appendChild(li2);}d.appendChild(su2);co.appendChild(d);ul.appendChild(co);}return ul;}
+
 function renderStatsRows(data) {
     statsTableBody.innerHTML = '';
     data.forEach(s => {
@@ -258,6 +263,23 @@ function renderStatsRows(data) {
             `<td class="num">${s.avg_elo || '-'}</td>` +
             `<td class="eco-cell">${escapeHtml(s.eco || '-')}</td>`;
         statsTableBody.appendChild(tr);
+        var tr2 = document.createElement('tr');
+        var td = document.createElement('td');
+        td.className = 'tree-cell';
+        td.colSpan = 10;
+        var det = document.createElement('details');
+        det.className = 'move-tree';
+        var sum = document.createElement('summary');
+        sum.className = 'tree-toggle';
+        sum.textContent = 'Move Tree';
+        det.appendChild(sum);
+        var con = document.createElement('div');
+        con.className = 'tree-content';
+        con.appendChild(renderTree(s.tree));
+        det.appendChild(con);
+        td.appendChild(det);
+        tr2.appendChild(td);
+        statsTableBody.appendChild(tr2);
     });
 }
 
