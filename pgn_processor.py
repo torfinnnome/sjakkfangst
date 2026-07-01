@@ -13,16 +13,23 @@ from http_client import fetch_with_retry
 _TOUR_ID_RE = re.compile(r'"tour":\{"id":"([^"]+)"')
 _TOURNAMENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
-# ECO code to opening name lookup (from Lichess chess-openings dataset, CC0)
-ECO_OPENINGS: dict[str, str] = {
-    "A00": "Amar Opening",
-    "A01": "Nimzo-Larsen Attack",
-    "A02": "Bird Opening",
-    "A03": "Bird Opening: Dutch Variation",
-    "A04": "Colle System: Rhamphorhynchus Variation",
-    "A05": "King's Indian Attack",
-    "A06": "Nimzo-Larsen Attack: Classical Variation",
-    "A07": "Hungarian Opening: Wiedenhagen-Beta Gambit",
+# ECO code to opening name lookup (from Lichess chess-openings dataset, CC0).
+# Lazy-loaded on first access (P9) to reduce import time.
+_ECO_OPENINGS: dict[str, str] | None = None
+
+
+def _get_eco_openings() -> dict[str, str]:
+    global _ECO_OPENINGS
+    if _ECO_OPENINGS is None:
+        _ECO_OPENINGS = {
+            "A00": "Amar Opening",
+            "A01": "Nimzo-Larsen Attack",
+            "A02": "Bird Opening",
+            "A03": "Bird Opening: Dutch Variation",
+            "A04": "Colle System: Rhamphorhynchus Variation",
+            "A05": "King's Indian Attack",
+            "A06": "Nimzo-Larsen Attack: Classical Variation",
+            "A07": "Hungarian Opening: Wiedenhagen-Beta Gambit",
     "A08": "King's Indian Attack: French Variation",
     "A09": "Réti Opening",
     "A10": "English Opening",
@@ -513,7 +520,8 @@ ECO_OPENINGS: dict[str, str] = {
     "E97": "King's Indian Defense: Orthodox Variation, Aronin-Taimanov Defense",
     "E98": "King's Indian Defense: Orthodox Variation, Classical System",
     "E99": "King's Indian Defense: Orthodox Variation, Classical System, Benko Attack",
-}
+        }
+    return _ECO_OPENINGS
 
 
 
@@ -567,6 +575,47 @@ def download_broadcast_pgn(broadcast_url: str) -> str:
         return ""
 
 
+def _build_name_variants(player_name):
+    """Build list of name variants for fallback matching."""
+    variants = []
+    if player_name:
+        variants.append(player_name.lower())
+        variants.append(player_name.replace("_", " ").lower())
+        if "_" in player_name:
+            parts = player_name.split("_")
+            variants.append(f"{parts[0]}, {parts[1]}".lower())
+    return variants
+
+
+def _matches_player(headers, fide_id, name_variants):
+    """Check if a game's headers match the target player by FIDE ID or name."""
+    white_fide = headers.get("WhiteFideId", "")
+    black_fide = headers.get("BlackFideId", "")
+    if white_fide == fide_id or black_fide == fide_id:
+        return True
+    if name_variants:
+        white_name = headers.get("White", "").lower()
+        black_name = headers.get("Black", "").lower()
+        for variant in name_variants:
+            if variant in white_name or variant in black_name:
+                return True
+    return False
+
+
+def _game_to_pgn(game):
+    """Export a chess.pgn.Game to PGN string with Sjakkfangst comment."""
+    exporter = chess.pgn.StringExporter()
+    pgn_output = game.accept(exporter)
+    lines = pgn_output.split("\n")
+    header_end = 0
+    for i, line in enumerate(lines):
+        if line.strip() == "":
+            header_end = i
+            break
+    lines.insert(header_end + 1, "{Downloaded with Sjakkfangst}")
+    return "\n".join(lines)
+
+
 def filter_games_by_fide(pgn_text: str, fide_id: str, player_name: str = "") -> str:
     """Filter PGN games by FIDE ID or player name.
 
@@ -584,15 +633,7 @@ def filter_games_by_fide(pgn_text: str, fide_id: str, player_name: str = "") -> 
     matching_games = []
     pgn_stream = io.StringIO(pgn_text)
 
-    # Prepare player name variations for matching
-    name_variants = []
-    if player_name:
-        name_variants.append(player_name.lower())
-        name_variants.append(player_name.replace("_", " ").lower())
-        # Try "Lastname, Firstname" format if slug is "Lastname_Firstname"
-        if "_" in player_name:
-            parts = player_name.split("_")
-            name_variants.append(f"{parts[0]}, {parts[1]}".lower())
+    name_variants = _build_name_variants(player_name)
 
     while True:
         try:
@@ -600,36 +641,8 @@ def filter_games_by_fide(pgn_text: str, fide_id: str, player_name: str = "") -> 
             if game is None:
                 break
 
-            # 1. Check FIDE IDs from headers (priority)
-            white_fide = game.headers.get("WhiteFideId", "")
-            black_fide = game.headers.get("BlackFideId", "")
-
-            is_match = white_fide == fide_id or black_fide == fide_id
-
-            # 2. Fallback: Check player names if no FIDE ID match
-            if not is_match and name_variants:
-                white_name = game.headers.get("White", "").lower()
-                black_name = game.headers.get("Black", "").lower()
-
-                for variant in name_variants:
-                    if variant in white_name or variant in black_name:
-                        is_match = True
-                        break
-
-            if is_match:
-                # Export the matching game to PGN string
-                exporter = chess.pgn.StringExporter()
-                pgn_output = game.accept(exporter)
-                # Add Sjakkfangst comment after headers (before movetext)
-                # Headers end at first blank line; insert comment there
-                lines = pgn_output.split("\n")
-                header_end = 0
-                for i, line in enumerate(lines):
-                    if line.strip() == "":
-                        header_end = i
-                        break
-                lines.insert(header_end + 1, "{Downloaded with Sjakkfangst}")
-                matching_games.append("\n".join(lines))
+            if _matches_player(game.headers, fide_id, name_variants):
+                matching_games.append(_game_to_pgn(game))
         except Exception:
             continue
 
@@ -698,7 +711,7 @@ def collect_opening_stats(pgn_text, fide_id):
         if lichess_opening:
             opening = lichess_opening
         elif eco_code:
-            opening = ECO_OPENINGS.get(eco_code, f"ECO {eco_code}")
+            opening = _get_eco_openings().get(eco_code, f"ECO {eco_code}")
         else:
             opening = "Unknown"
 
@@ -773,3 +786,182 @@ def collect_opening_stats(pgn_text, fide_id):
 
     result_list.sort(key=lambda x: x["games"], reverse=True)
     return {"stats": result_list, "player_name": player_name or ""}
+
+
+def _merge_raw_stats(all_stats):
+    """Merge multiple raw stats dicts into one, accumulating counts."""
+    merged = {}
+    for stats in all_stats:
+        for key, entry in stats.items():
+            if key not in merged:
+                merged[key] = entry.copy()
+                merged[key]["elos"] = entry["elos"][:]
+                merged[key]["dates"] = entry["dates"][:]
+            else:
+                m = merged[key]
+                m["games"] += entry["games"]
+                m["wins"] += entry["wins"]
+                m["draws"] += entry["draws"]
+                m["losses"] += entry["losses"]
+                m["whites"] += entry["whites"]
+                m["blacks"] += entry["blacks"]
+                m["elos"].extend(entry["elos"])
+                m["dates"].extend(entry["dates"])
+    return merged
+
+
+def _format_raw_stats(raw_stats):
+    """Convert raw stats dict to formatted stats list, sorted by games desc."""
+    result_list = []
+    for entry in raw_stats.values():
+        avg_elo = (
+            round(sum(entry["elos"]) / len(entry["elos"]))
+            if entry["elos"]
+            else None
+        )
+        win_pct = round(entry["wins"] / entry["games"] * 100) if entry["games"] else 0
+
+        result_list.append(
+            {
+                "opening": entry["opening"],
+                "eco": entry["eco"],
+                "games": entry["games"],
+                "wins": entry["wins"],
+                "draws": entry["draws"],
+                "losses": entry["losses"],
+                "whites": entry["whites"],
+                "blacks": entry["blacks"],
+                "win_pct": win_pct,
+                "avg_elo": avg_elo,
+                "date_from": min(entry["dates"]) if entry["dates"] else "",
+                "date_to": max(entry["dates"]) if entry["dates"] else "",
+            }
+        )
+
+    result_list.sort(key=lambda x: x["games"], reverse=True)
+    return result_list
+
+
+def filter_and_collect_stats(pgn_text, fide_id, player_name=""):
+    """Single-pass PGN parsing: filter games and collect opening stats.
+
+    Parses the PGN once, filters games matching the FIDE ID (with name
+    fallback), and collects opening statistics simultaneously.
+
+    Args:
+        pgn_text: Raw PGN text containing one or more games.
+        fide_id: FIDE ID to filter for (as string).
+        player_name: Optional player name slug for fallback matching.
+
+    Returns:
+        Dict with keys:
+            filtered_pgn: str — PGN of matching games (empty string if none)
+            stats: dict — raw stats keyed by (opening, eco), accumulates
+                      games/wins/draws/losses/whites/blacks/elos/dates
+            player_name: str — player's proper name from PGN headers
+    """
+    if not pgn_text:
+        return {"filtered_pgn": "", "stats": {}, "player_name": ""}
+
+    matching_games = []
+    stats = {}
+    stream = io.StringIO(pgn_text)
+    player_name_resolved = None
+
+    name_variants = _build_name_variants(player_name)
+
+    while True:
+        try:
+            game = chess.pgn.read_game(stream)
+            if game is None:
+                break
+
+            headers = game.headers
+            if not _matches_player(headers, fide_id, name_variants):
+                continue
+
+            matching_games.append(_game_to_pgn(game))
+
+            white_fide = headers.get("WhiteFideId", "")
+            black_fide = headers.get("BlackFideId", "")
+
+            if player_name_resolved is None:
+                player_name_resolved = headers.get(
+                    "White" if white_fide == fide_id else "Black", ""
+                )
+
+            if white_fide != fide_id and black_fide != fide_id:
+                continue
+
+            is_white = white_fide == fide_id
+            result = headers.get("Result", "*")
+
+            if is_white:
+                outcome = (
+                    "W" if result == "1-0"
+                    else "L" if result == "0-1"
+                    else "D"
+                )
+            else:
+                outcome = (
+                    "W" if result == "0-1"
+                    else "L" if result == "1-0"
+                    else "D"
+                )
+
+            eco_code = headers.get("ECO", "")
+            lichess_opening = headers.get("Opening", "")
+            opening = (
+                lichess_opening if lichess_opening
+                else _get_eco_openings().get(eco_code, f"ECO {eco_code}") if eco_code
+                else "Unknown"
+            )
+
+            opponent_elo = None
+            try:
+                elo_str = headers.get("BlackElo" if is_white else "WhiteElo", "")
+                opponent_elo = int(elo_str) if elo_str and elo_str.isdigit() else None
+            except ValueError:
+                opponent_elo = None
+
+            date_str = headers.get("Date", "????.??.??")
+
+            key = (opening, eco_code)
+            if key not in stats:
+                stats[key] = {
+                    "opening": opening,
+                    "eco": eco_code,
+                    "games": 0,
+                    "wins": 0,
+                    "draws": 0,
+                    "losses": 0,
+                    "whites": 0,
+                    "blacks": 0,
+                    "elos": [],
+                    "dates": [],
+                }
+
+            entry = stats[key]
+            entry["games"] += 1
+            if outcome == "W":
+                entry["wins"] += 1
+            elif outcome == "D":
+                entry["draws"] += 1
+            else:
+                entry["losses"] += 1
+            if is_white:
+                entry["whites"] += 1
+            else:
+                entry["blacks"] += 1
+            if opponent_elo is not None:
+                entry["elos"].append(opponent_elo)
+            entry["dates"].append(date_str)
+
+        except Exception:
+            continue
+
+    return {
+        "filtered_pgn": "\n\n".join(matching_games),
+        "stats": stats,
+        "player_name": player_name_resolved or "",
+    }

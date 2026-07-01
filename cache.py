@@ -108,6 +108,13 @@ def _is_expired(metadata: dict) -> bool:
     return datetime.now(timezone.utc) - cached_at > ttl
 
 
+def _atomic_write(path: Path, content: str) -> None:
+    """Write content atomically via .tmp + os.replace (P10)."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content)
+    os.replace(str(tmp), str(path))
+
+
 def _cleanup_expired(subdir: str, hash_key: str) -> None:
     """Remove expired cache files."""
     pgn_path = _get_pgn_path(subdir, hash_key)
@@ -141,11 +148,20 @@ def get_cached_tournament(tournament_id: str) -> Optional[str]:
         metadata = json.loads(meta_path.read_text())
         pgn_text = pgn_path.read_text()
 
-        # Re-evaluate status from the PGN to catch transitions
-        current_status, _ = _determine_tournament_status(pgn_text)
+        # Re-evaluate status to catch ongoing→completed transitions (P5).
+        # Use stored last_game_date when available to avoid re-parsing PGN.
+        last_date = metadata.get("last_game_date")
+        if last_date:
+            end_dt = datetime.fromisoformat(last_date)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+            days_since = (datetime.now(timezone.utc) - end_dt).days
+            current_status = "completed" if days_since > CACHE_COMPLETED_DAYS else "ongoing"
+        else:
+            current_status, _ = _determine_tournament_status(pgn_text)
         if metadata.get("status") != current_status:
             metadata["status"] = current_status
-            meta_path.write_text(json.dumps(metadata))
+            _atomic_write(meta_path, json.dumps(metadata))
 
         if _is_expired(metadata):
             _cleanup_expired("tournaments", hash_key)
@@ -170,7 +186,7 @@ def cache_tournament(tournament_id: str, pgn_text: str, url: str = "") -> None:
         meta_path = _get_metadata_path("tournaments", hash_key)
 
         pgn_path.parent.mkdir(parents=True, exist_ok=True)
-        pgn_path.write_text(pgn_text)
+        _atomic_write(pgn_path, pgn_text)
 
         # Determine status based on game dates
         status, end_date = _determine_tournament_status(pgn_text)
@@ -184,7 +200,7 @@ def cache_tournament(tournament_id: str, pgn_text: str, url: str = "") -> None:
         if end_date:
             metadata["last_game_date"] = end_date
 
-        meta_path.write_text(json.dumps(metadata))
+        _atomic_write(meta_path, json.dumps(metadata))
     except (OSError, IOError) as e:
         logger.error(f"Failed to write to cache: {e}")
 
@@ -216,7 +232,7 @@ def get_cached_player(fide_id: str, tournament_id: str) -> Optional[str]:
         if "status" not in metadata:
             status, _ = _determine_tournament_status(pgn_text)
             metadata["status"] = status
-            meta_path.write_text(json.dumps(metadata))
+            _atomic_write(meta_path, json.dumps(metadata))
 
         if _is_expired(metadata):
             _cleanup_expired("players", hash_key)
@@ -245,7 +261,7 @@ def cache_player(fide_id: str, tournament_id: str, pgn_text: str, status: Option
         meta_path = _get_metadata_path("players", hash_key)
 
         pgn_path.parent.mkdir(parents=True, exist_ok=True)
-        pgn_path.write_text(pgn_text)
+        _atomic_write(pgn_path, pgn_text)
 
         if status is None:
             status, _ = _determine_tournament_status(pgn_text)
@@ -256,7 +272,7 @@ def cache_player(fide_id: str, tournament_id: str, pgn_text: str, status: Option
             "tournament_id": tournament_id,
             "status": status,
         }
-        meta_path.write_text(json.dumps(metadata))
+        _atomic_write(meta_path, json.dumps(metadata))
     except (OSError, IOError) as e:
         logger.error(f"Failed to write to cache: {e}")
 
@@ -279,14 +295,14 @@ def cache_task(task_id: str, pgn_text: str, filename: str) -> None:
         meta_path = _get_metadata_path("tasks", hash_key)
 
         pgn_path.parent.mkdir(parents=True, exist_ok=True)
-        pgn_path.write_text(pgn_text)
+        _atomic_write(pgn_path, pgn_text)
 
         metadata = {
             "cached_at": datetime.now(timezone.utc).isoformat(),
             "task_id": task_id,
             "filename": filename,
         }
-        meta_path.write_text(json.dumps(metadata))
+        _atomic_write(meta_path, json.dumps(metadata))
     except (OSError, IOError) as e:
         logger.error(f"Failed to write task to cache: {e}")
 

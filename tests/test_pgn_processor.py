@@ -2,7 +2,6 @@
 
 from unittest.mock import Mock, patch
 
-import pytest
 from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
 
 

@@ -12,7 +12,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, send_file, Response, render_template
 
 from scraper import parse_fide_url, get_broadcasts
-from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
+from pgn_processor import (
+    download_broadcast_pgn,
+    filter_and_collect_stats,
+    filter_games_by_fide,  # kept for test mocking compatibility
+    collect_opening_stats,
+    _merge_raw_stats,
+    _format_raw_stats,
+)
 from cache import (
     get_cached_player, cache_player, get_cached_tournament, cache_tournament,
     _get_hash, _get_metadata_path, cache_task, get_cached_task,
@@ -44,6 +51,7 @@ def set_security_headers(response):
 # Parallel download configuration (env-configurable)
 DOWNLOAD_WORKERS = int(os.environ.get("DOWNLOAD_WORKERS", "3"))
 LICHESS_MIN_SPACING = float(os.environ.get("LICHESS_MIN_SPACING", "2"))
+SSE_MAX_DURATION = int(os.environ.get("SSE_MAX_DURATION", "600"))  # seconds (P12)
 
 # Shared rate limiter so concurrent download workers stay polite to Lichess.
 _lichess_lock = threading.Lock()
@@ -114,6 +122,8 @@ def fetch_stream():
     player_name = player_info["player_name"]
 
     def generate():
+        start_time = time.time()  # P12: max-duration guard
+
         # Get list of broadcasts
         broadcasts = get_broadcasts(fide_id, player_name)
 
@@ -122,6 +132,8 @@ def fetch_stream():
             return
 
         all_games = []
+        all_raw_stats = []
+        all_player_names = []
         p_hits = 0
         t_hits = 0
         d_hits = 0
@@ -183,11 +195,14 @@ def fetch_stream():
                     tournament_status = meta_data.get("status")
                 except Exception:
                     pass
-                filtered = filter_games_by_fide(tournament_pgn, fide_id, player_name)
-                if filtered:
-                    cache_player(fide_id, tournament_id, filtered, tournament_status)
+                res = filter_and_collect_stats(tournament_pgn, fide_id, player_name)
+                if res["filtered_pgn"]:
+                    cache_player(fide_id, tournament_id, res["filtered_pgn"], tournament_status)
                     t_hits += 1
-                    all_games.append(filtered)
+                    all_games.append(res["filtered_pgn"])
+                    all_raw_stats.append(res["stats"])
+                    if res["player_name"]:
+                        all_player_names.append(res["player_name"])
                 continue
 
             # Not cached — queue for parallel download
@@ -203,6 +218,10 @@ def fetch_stream():
                     for (i, b, tid) in to_download
                 }
                 for future in as_completed(future_to_info):
+                    # P12: abort if SSE stream exceeds max duration
+                    if time.time() - start_time > SSE_MAX_DURATION:
+                        yield f"data: {json.dumps({'error': 'Request timed out — too many broadcasts'})}\n\n"
+                        return
                     i, broadcast, tournament_id = future_to_info[future]
                     name = broadcast["name"]
                     try:
@@ -211,11 +230,14 @@ def fetch_stream():
                         pgn_text = ""
                     if pgn_text:
                         cache_tournament(tournament_id, pgn_text, broadcast["url"])
-                        filtered = filter_games_by_fide(pgn_text, fide_id, player_name)
-                        cache_player(fide_id, tournament_id, filtered)
-                        if filtered:
+                        res = filter_and_collect_stats(pgn_text, fide_id, player_name)
+                        if res["filtered_pgn"]:
+                            cache_player(fide_id, tournament_id, res["filtered_pgn"])
                             d_hits += 1
-                            all_games.append(filtered)
+                            all_games.append(res["filtered_pgn"])
+                            all_raw_stats.append(res["stats"])
+                            if res["player_name"]:
+                                all_player_names.append(res["player_name"])
                     completed += 1
                     progress = max(1, int((completed / total) * 100)) if total else 100
                     yield f"data: {json.dumps({'index': i, 'progress': progress, 'name': name, 'cached': False, 'url': broadcast['url']})}\n\n"
@@ -231,11 +253,16 @@ def fetch_stream():
         cache_task(task_id, combined_pgn, filename)
 
         # Collect opening stats for the player
-        opening_result = collect_opening_stats(combined_pgn, fide_id)
+        merged = _merge_raw_stats(all_raw_stats)
+        final_stats = _format_raw_stats(merged)
+        player_name_resolved = all_player_names[0] if all_player_names else ""
+        if not player_name_resolved:
+            opening_result = collect_opening_stats(combined_pgn, fide_id)
+            player_name_resolved = opening_result.get("player_name", "")
 
         url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
                         url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
-        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': opening_result['stats'], 'player_name': opening_result['player_name']})}\n\n"
+        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': final_stats, 'player_name': player_name_resolved})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"

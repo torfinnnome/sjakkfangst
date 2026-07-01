@@ -3,7 +3,8 @@
 import os
 import re
 import time
-from typing import Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
@@ -104,39 +105,50 @@ def get_broadcasts(
     seen_urls = set()
     broadcasts = []
 
-    try:
-        response = fetch_with_retry(url, timeout=30)
-    except requests.RequestException:
-        return []
+    def _fetch_page(page_url: str) -> Tuple[List[Dict[str, str]], Optional[str]]:
+        """Fetch and parse a single page. Returns (broadcasts, next_url)."""
+        try:
+            response = fetch_with_retry(page_url, timeout=30)
+        except requests.RequestException:
+            return [], None
+        soup = BeautifulSoup(response.text, "html.parser")
+        return _parse_page_broadcasts(soup)
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    page_broadcasts, next_url = _parse_page_broadcasts(soup)
+    # Fetch page 1 (need it to discover next page URL)
+    page_broadcasts, next_url = _fetch_page(url)
 
     for bc in page_broadcasts:
         if bc["url"] not in seen_urls:
             seen_urls.add(bc["url"])
             broadcasts.append(bc)
 
-    # Follow pagination until we've hit the limit or there are no more pages
-    while next_url and len(broadcasts) < max_broadcasts:
-        full_next_url = f"https://lichess.org{next_url}"
+    if len(broadcasts) >= max_broadcasts or not next_url:
+        return broadcasts[:max_broadcasts]
 
-        try:
-            response = fetch_with_retry(full_next_url, timeout=30)
-        except requests.RequestException:
-            break
+    # Fetch remaining pages using ThreadPoolExecutor for parallelism.
+    # Pages are submitted as URLs are discovered; results are collected
+    # in batches with rate limiting between batches.
+    pending = {}
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        while next_url and len(broadcasts) < max_broadcasts:
+            # Submit all currently-known pages
+            full_next_url = f"https://lichess.org{next_url}"
+            pending[executor.submit(_fetch_page, full_next_url)] = next_url
+            next_url = None
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        page_broadcasts, next_url = _parse_page_broadcasts(soup)
+            # Wait for batch to complete
+            for future in as_completed(pending):
+                page_broadcasts, next_url = future.result()
+                for bc in page_broadcasts:
+                    if bc["url"] not in seen_urls:
+                        seen_urls.add(bc["url"])
+                        broadcasts.append(bc)
+                        if len(broadcasts) >= max_broadcasts:
+                            break
+                if len(broadcasts) >= max_broadcasts:
+                    break
 
-        for bc in page_broadcasts:
-            if bc["url"] not in seen_urls:
-                seen_urls.add(bc["url"])
-                broadcasts.append(bc)
-
-        if len(broadcasts) >= max_broadcasts:
-            break
-
-        time.sleep(1)
+            pending.clear()
+            time.sleep(1)
 
     return broadcasts[:max_broadcasts]

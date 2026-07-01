@@ -113,9 +113,8 @@ class TestFetchStreamHappyPath:
                           side_effect=lambda f, t: cached_player_pgn if t == "idA" else None), \
              patch.object(app_module, "get_cached_tournament", return_value=None), \
              patch.object(app_module, "download_broadcast_pgn", return_value=downloaded_pgn), \
-             patch.object(app_module, "filter_games_by_fide", return_value=filtered_pgn), \
-             patch.object(app_module, "collect_opening_stats",
-                          return_value={"stats": [], "player_name": "Carlsen, Magnus"}):
+             patch.object(app_module, "filter_and_collect_stats",
+                          return_value={"filtered_pgn": filtered_pgn, "stats": {}, "player_name": "Carlsen, Magnus"}):
             # Consume the streaming response while patches are active; the SSE
             # generator is lazily evaluated when data is accessed.
             r = client.get(f"/fetch_stream?url={VALID_URL}", headers=SAME_ORIGIN)
@@ -161,7 +160,8 @@ class TestFetchStreamHappyPath:
              patch.object(app_module, "get_cached_player", return_value=None), \
              patch.object(app_module, "get_cached_tournament", return_value=None), \
              patch.object(app_module, "download_broadcast_pgn", return_value=""), \
-             patch.object(app_module, "filter_games_by_fide", return_value=""):
+             patch.object(app_module, "filter_and_collect_stats",
+                          return_value={"filtered_pgn": "", "stats": {}, "player_name": None}):
             r = client.get(f"/fetch_stream?url={VALID_URL}", headers=SAME_ORIGIN)
             events = parse_sse_events(r)
         assert any(e.get("error") == "No matching games found" for e in events)
