@@ -9,7 +9,7 @@ Extend the opening stats table with an expandable move tree per opening. Each tr
 | `TREE_DEPTH` | 6 | Max plies (half-moves) from the opening root |
 | `TREE_TOP_N` | 5 | Number of top moves shown per level; rest collapse |
 
-Both are module-level constants in `pgn_processor.py`, easily adjustable.
+`TREE_DEPTH` is a module-level constant in `pgn_processor.py`. `TREE_TOP_N` is a frontend constant in `static/app.js`. Both are easily adjustable.
 
 ## Backend
 
