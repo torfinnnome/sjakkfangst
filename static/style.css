@@ -300,3 +300,76 @@ button:disabled {
     height: 20px;
     fill: currentColor;
 }
+
+.search-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+#searchResults {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    display: none;
+}
+
+#searchResults.visible {
+    display: block;
+}
+
+.search-result {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+    color: #333;
+}
+
+.search-result:last-child {
+    border-bottom: none;
+}
+
+.search-result:hover,
+.search-result.active {
+    background-color: #f0f9f4;
+    color: #369962;
+}
+
+.search-result .player-name {
+    font-weight: 600;
+}
+
+.search-result .player-fide {
+    font-size: 12px;
+    color: #999;
+    margin-left: 8px;
+}
+
+.search-no-results {
+    padding: 10px 12px;
+    color: #999;
+    font-size: 14px;
+    font-style: italic;
+}
+
+input[type="text"] {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-color: #369962;
+}

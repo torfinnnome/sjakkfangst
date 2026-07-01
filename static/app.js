@@ -322,3 +322,152 @@ function showError(msg) {
     progressContainer.style.display = 'none';
     submitBtn.disabled = false;
 }
+
+// Search autocomplete elements
+const searchResults = document.getElementById('searchResults');
+let searchTimeout = null;
+let activeSearchIndex = -1;
+let currentSearchResults = [];
+
+function isUrl(str) {
+    return /^(https?:\/\/)?lichess\.org\//i.test(str);
+}
+
+function debounceSearch(value) {
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    if (isUrl(value) || value.length < 2) {
+        hideSearchDropdown();
+        return;
+    }
+    searchTimeout = setTimeout(function() {
+        fetch("/search?q=" + encodeURIComponent(value))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (Array.isArray(data)) {
+                    currentSearchResults = data;
+                    activeSearchIndex = -1;
+                    renderSearchDropdown();
+                }
+            })
+            .catch(function() {
+                hideSearchDropdown();
+            });
+    }, 1500);
+}
+
+function renderSearchDropdown() {
+    if (!currentSearchResults || currentSearchResults.length === 0) {
+        searchResults.innerHTML = '<div class="search-no-results">No players found</div>';
+        searchResults.classList.add('visible');
+        urlInput.setAttribute("aria-expanded", "true");
+        return;
+    }
+
+    searchResults.innerHTML = '';
+    currentSearchResults.forEach(function(player, index) {
+        var div = document.createElement('div');
+        div.className = 'search-result';
+        div.setAttribute("role", "option");
+        div.setAttribute("id", "searchResult_" + index);
+        div.setAttribute("aria-selected", "false");
+        div.dataset.fideId = player.fide_id;
+        div.dataset.slug = player.slug;
+        div.dataset.url = 'https://lichess.org/fide/' + player.fide_id + '/' + player.slug;
+
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'player-name';
+        nameSpan.textContent = player.name;
+
+        var fideSpan = document.createElement('span');
+        fideSpan.className = 'player-fide';
+        fideSpan.textContent = '(FIDE ' + player.fide_id + ')';
+
+        div.appendChild(nameSpan);
+        div.appendChild(fideSpan);
+
+        div.addEventListener('mouseenter', function() {
+            updateActiveSearchItem(index);
+        });
+
+        div.addEventListener('click', function() {
+            selectSearchResult(div.dataset.url);
+        });
+
+        searchResults.appendChild(div);
+    });
+
+    searchResults.classList.add('visible');
+    urlInput.setAttribute("aria-expanded", "true");
+}
+
+function hideSearchDropdown() {
+    searchResults.classList.remove('visible');
+    searchResults.innerHTML = '';
+    activeSearchIndex = -1;
+    currentSearchResults = [];
+    urlInput.setAttribute("aria-expanded", "false");
+    urlInput.setAttribute("aria-activedescendant", "");
+}
+
+function updateActiveSearchItem(index) {
+    var items = searchResults.querySelectorAll('.search-result');
+    items.forEach(function(item, i) {
+        if (i === index) {
+            item.classList.add('active');
+            item.setAttribute("aria-selected", "true");
+            urlInput.setAttribute("aria-activedescendant", item.id);
+        } else {
+            item.classList.remove('active');
+            item.setAttribute("aria-selected", "false");
+        }
+    });
+    activeSearchIndex = index;
+}
+
+function selectSearchResult(url) {
+    urlInput.value = url;
+    hideSearchDropdown();
+}
+
+function handleSearchKeydown(e) {
+    var items = searchResults.querySelectorAll('.search-result');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (activeSearchIndex < items.length - 1) {
+            updateActiveSearchItem(activeSearchIndex + 1);
+            items[activeSearchIndex].scrollIntoView({ block: 'nearest' });
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (activeSearchIndex > 0) {
+            updateActiveSearchItem(activeSearchIndex - 1);
+            items[activeSearchIndex].scrollIntoView({ block: 'nearest' });
+        }
+    } else if (e.key === 'Enter') {
+        if (activeSearchIndex >= 0 && items[activeSearchIndex]) {
+            e.preventDefault();
+            selectSearchResult(items[activeSearchIndex].dataset.url);
+        }
+    } else if (e.key === 'Escape') {
+        hideSearchDropdown();
+    }
+}
+
+// Wire up input event for debounced search
+urlInput.addEventListener('input', function() {
+    debounceSearch(urlInput.value.trim());
+});
+
+// Wire up keydown for keyboard navigation
+urlInput.addEventListener('keydown', handleSearchKeydown);
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!urlInput.contains(e.target) && !searchResults.contains(e.target)) {
+        hideSearchDropdown();
+    }
+});

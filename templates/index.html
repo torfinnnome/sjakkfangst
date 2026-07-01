@@ -14,15 +14,23 @@
         </p>
         
         <form id="fetch-form">
-            <label for="url">Lichess FIDE Player URL</label>
-            <input 
-                type="url" 
-                id="url" 
-                name="url" 
-                placeholder="https://lichess.org/fide/1503014/MagnusCarlsen"
-                required
-                autofocus
-            >
+            <label for="url">Player Name or Lichess FIDE URL</label>
+            <div class="search-wrapper">
+                <input
+                    type="text"
+                    id="url"
+                    name="url"
+                    placeholder="Search player name or paste FIDE URL"
+                    required
+                    autofocus
+                    autocomplete="off"
+                    aria-autocomplete="list"
+                    aria-controls="searchResults"
+                    aria-expanded="false"
+                    aria-activedescendant=""
+                >
+                <div id="searchResults" role="listbox" aria-label="Player search results"></div>
+            </div>
             <button type="submit" id="submit-btn">Fetch Games</button>
         </form>
 
