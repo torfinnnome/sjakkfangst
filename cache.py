@@ -354,7 +354,7 @@ def get_cached_search(query: str) -> Optional[list]:
     Returns:
         Cached list of player dicts if found, None otherwise.
     """
-    hash_key = hashlib.md5(query.lower().encode()).hexdigest()[:16]
+    hash_key = hashlib.md5(query.lower().encode()).hexdigest()[:16]  # MD5 for shorter filenames (search queries are short strings)
     search_dir = Path(CACHE_DIR) / "search"
     json_path = search_dir / f"{hash_key}.json"
 
@@ -364,6 +364,7 @@ def get_cached_search(query: str) -> Optional[list]:
     try:
         return json.loads(json_path.read_text())
     except (json.JSONDecodeError, IOError):
+        json_path.unlink(missing_ok=True)
         return None
 
 
@@ -375,7 +376,7 @@ def cache_search(query: str, results: list) -> None:
         results: List of player dicts with 'fide_id', 'name', 'slug' keys.
     """
     try:
-        hash_key = hashlib.md5(query.lower().encode()).hexdigest()[:16]
+        hash_key = hashlib.md5(query.lower().encode()).hexdigest()[:16]  # MD5 for shorter filenames (search queries are short strings)
         search_dir = Path(CACHE_DIR) / "search"
         json_path = search_dir / f"{hash_key}.json"
 

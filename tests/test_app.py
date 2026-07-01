@@ -207,7 +207,8 @@ class TestSearchCache:
         assert len(cached) == 2
         assert cached[0]["fide_id"] == "1503014"
 
-    def test_cache_is_permanent(self, temp_cache_dir, monkeypatch):
+    def test_cache_ignores_ttl(self, temp_cache_dir, monkeypatch):
+        """Search cache has no TTL; setting CACHE_TTL_HOURS to 0 doesn't evict it."""
         results = [{"fide_id": "1503014", "name": "Carlsen, Magnus", "slug": "MagnusCarlsen"}]
         cache.cache_search("carlsen", results)
         monkeypatch.setattr(cache, "CACHE_TTL_HOURS", 0)
