@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock, patch
 
-from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats
+from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats, build_opening_tree
 
 
 class TestDownloadBroadcastPgn:
@@ -524,3 +524,116 @@ class TestCollectOpeningStats:
 
         assert len(stats) == 1
         assert stats[0]["avg_elo"] is None
+
+
+class TestBuildOpeningTree:
+    """Tests for build_opening_tree function."""
+
+    def test_basic_tree(self):
+        """Single game, verify tree structure and children dict."""
+        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1234567"][BlackFideId "7654321"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 e5 2. Nf3 Nc6 1-0"""
+        result = build_opening_tree(pgn, "1234567")
+        assert len(result) == 1
+        tree = result[0]
+        assert tree["opening"] == "Ruy Lopez"
+        assert tree["eco"] == "C65"
+        assert tree["games"] == 1
+        assert tree["wins"] == 1
+        assert "children" in tree
+        assert "e4" in tree["children"]
+        assert "e5" in tree["children"]["e4"]["children"]
+
+    def test_accumulation(self):
+        """Two games same opening, verify games/wins/whites/blacks accumulate."""
+        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1234567"][BlackFideId "7654321"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 e5 1-0
+
+[Event "T2"][Site "?"][Date "2024.01.02"][Round "?"]
+[White "A"][Black "C"][Result "1/2-1/2"]
+[WhiteFideId "1234567"][BlackFideId "1111111"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 e5 1/2-1/2"""
+        result = build_opening_tree(pgn, "1234567")
+        assert len(result) == 1
+        tree = result[0]
+        assert tree["games"] == 2
+        assert tree["wins"] == 1
+        assert tree["draws"] == 1
+        assert tree["whites"] == 2
+        assert tree["blacks"] == 0
+
+    def test_per_color_breakdown(self):
+        """White wins as white, black loses as black."""
+        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1234567"][BlackFideId "7654321"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 e5 1-0
+
+[Event "T2"][Site "?"][Date "2024.01.02"][Round "?"]
+[White "C"][Black "A"][Result "1-0"]
+[WhiteFideId "1111111"][BlackFideId "1234567"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 e5 1-0"""
+        result = build_opening_tree(pgn, "1234567")
+        tree = result[0]
+        assert tree["white_wins"] == 1
+        assert tree["white_losses"] == 0
+        assert tree["black_wins"] == 0
+        assert tree["black_losses"] == 1
+
+    def test_depth_limit(self):
+        """Game with 10+ plies, assert tree depth <= TREE_DEPTH (6)."""
+        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1234567"][BlackFideId "7654321"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 1-0"""
+        result = build_opening_tree(pgn, "1234567")
+        tree = result[0]
+
+        def max_depth(node):
+            if not node["children"]:
+                return 0
+            return 1 + max(max_depth(v) for v in node["children"].values())
+
+        assert max_depth(tree) <= 6
+
+    def test_short_game(self):
+        """1 move game, tree stops gracefully."""
+        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1234567"][BlackFideId "7654321"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 1-0"""
+        result = build_opening_tree(pgn, "1234567")
+        assert len(result) == 1
+        assert "e4" in result[0]["children"]
+
+    def test_empty_pgn(self):
+        """Empty string returns []."""
+        assert build_opening_tree("", "1234567") == []
+
+    def test_non_matching_fide(self):
+        """Different FIDE returns []."""
+        pgn = """[Event "T1"][Site "?"][Date "2024.01.01"][Round "?"]
+[White "A"][Black "B"][Result "1-0"]
+[WhiteFideId "1111111"][BlackFideId "2222222"]
+[ECO "C65"][Opening "Ruy Lopez"]
+
+1. e4 e5 1-0"""
+        assert build_opening_tree(pgn, "9999999") == []
