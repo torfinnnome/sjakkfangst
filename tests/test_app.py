@@ -6,9 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import requests as requests_lib
 
 import app as app_module
 import cache
+import rate_limit
 from rate_limit import RateLimiter, MAX_REQUESTS_PER_IP
 
 
@@ -251,3 +253,79 @@ class TestSearchRateLimiter:
         limiter.check("127.0.0.1")
         allowed, _ = limiter.check("192.168.1.1")
         assert allowed is True
+
+
+class TestSearchEndpoint:
+    def test_short_query_returns_empty(self, client):
+        r = client.get("/search?q=a")
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+    def test_empty_query_returns_empty(self, client):
+        r = client.get("/search?q=")
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+    def test_scraper_and_caching_flow(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
+
+        mock_html = """
+        <div class="player-search-result">
+          <a href="/fide/1503014/MagnusCarlsen" class="player-search-result__link">
+            <span class="player-intro__name">Carlsen, Magnus</span>
+          </a>
+        </div>
+        <div class="player-search-result">
+          <a href="/fide/1001234/HikaruNakamura" class="player-search-result__link">
+            <span class="player-intro__name">Nakamura, Hikaru</span>
+          </a>
+        </div>
+        """
+
+        mock_response = requests_lib.Response()
+        mock_response._content = mock_html.encode()
+        mock_response.status_code = 200
+
+        with patch("app.fetch_with_retry", return_value=mock_response):
+            r = client.get("/search?q=carl")
+
+        assert r.status_code == 200
+        data = r.get_json()
+        assert len(data) == 1
+        assert data[0]["fide_id"] == "1503014"
+        assert data[0]["name"] == "Carlsen, Magnus"
+        assert data[0]["slug"] == "MagnusCarlsen"
+
+    def test_cache_hit_returns_cached(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
+
+        cache.cache_search("test", [{"fide_id": "999", "name": "Test, Player", "slug": "TestPlayer"}])
+
+        r = client.get("/search?q=test")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert len(data) == 1
+        assert data[0]["fide_id"] == "999"
+
+    def test_rate_limiting_returns_429(self, client, temp_cache_dir, monkeypatch):
+        monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
+
+        mock_html = '<div class="player-search-result"><a href="/fide/1/x"><span class="player-intro__name">A</span></a></div>'
+        mock_response = requests_lib.Response()
+        mock_response._content = mock_html.encode()
+        mock_response.status_code = 200
+
+        with patch("app.fetch_with_retry", return_value=mock_response):
+            r1 = client.get("/search?q=test")
+            assert r1.status_code == 200
+
+            r2 = client.get("/search?q=test")
+            assert r2.status_code == 429
+
+    def test_error_handling_returns_500(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
+
+        with patch("app.fetch_with_retry", side_effect=requests_lib.RequestException("fail")):
+            r = client.get("/search?q=test")
+
+        assert r.status_code == 500

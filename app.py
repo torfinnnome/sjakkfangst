@@ -4,12 +4,15 @@ import io
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from flask import Flask, request, send_file, Response, render_template
+from flask import Flask, request, send_file, Response, render_template, jsonify
+from bs4 import BeautifulSoup
+from urllib.parse import quote
 
 from scraper import parse_fide_url, get_broadcasts
 from pgn_processor import (
@@ -20,8 +23,10 @@ from pgn_processor import (
 from cache import (
     get_cached_player, cache_player, get_cached_tournament, cache_tournament,
     _get_hash, _get_metadata_path, cache_task, get_cached_task,
+    get_cached_search, cache_search,
 )
-from rate_limit import rate_limiter
+from rate_limit import rate_limiter, _search_limiter
+from http_client import fetch_with_retry
 
 url_logger = logging.getLogger("sjakkfangst.urls")
 url_logger.propagate = False
@@ -271,6 +276,79 @@ def download(task_id):
         as_attachment=True,
         download_name=task["filename"],
     )
+
+
+def search_fide_players(query: str) -> list:
+    """Scrape Lichess FIDE directory for players matching the query.
+
+    Args:
+        query: Player name search term.
+
+    Returns:
+        List of dicts with 'fide_id', 'name', 'slug' keys.
+
+    Raises:
+        requests.RequestException on network failures.
+    """
+    url = f"https://lichess.org/fide?q={quote(query)}"
+    response = fetch_with_retry(url, timeout=15)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    results = []
+    for item in soup.find_all("div", class_="player-search-result"):
+        link = item.find("a", class_="player-search-result__link", href=True)
+        name_span = item.find("span", class_="player-intro__name")
+        if not link or not name_span:
+            continue
+
+        href = link["href"]
+        match = re.match(r"^/fide/(\d+)/(\S+)$", href)
+        if not match:
+            continue
+
+        fide_id = match.group(1)
+        slug = match.group(2)
+        name = name_span.get_text(strip=True)
+
+        results.append({
+            "fide_id": fide_id,
+            "name": name,
+            "slug": slug,
+        })
+
+    query_lower = query.lower()
+    return [r for r in results if query_lower in r["name"].lower() or query_lower in r["fide_id"]]
+
+
+@app.route("/search", methods=["GET"])
+def search():
+    """Search for FIDE players by name. Returns JSON array of matches.
+
+    Results are cached permanently. Rate limited to 1 request per 5s per IP.
+    Queries shorter than 2 characters return empty immediately.
+    """
+    query = request.args.get("q", "").strip()
+
+    if len(query) < 2:
+        return jsonify([])
+
+    client_ip = request.remote_addr
+    allowed, wait = _search_limiter.check(client_ip)
+    if not allowed:
+        return jsonify({"error": "rate_limited", "wait": int(wait) + 1}), 429
+
+    cached = get_cached_search(query)
+    if cached is not None:
+        return jsonify(cached)
+
+    try:
+        results = search_fide_players(query)
+    except Exception:
+        logging.getLogger(__name__).exception("Search failed for query: %s", query)
+        return jsonify({"error": "search failed"}), 500
+
+    cache_search(query, results)
+    return jsonify(results)
 
 
 if os.environ.get("SJAKKFANGST_LOG_URLS"):
