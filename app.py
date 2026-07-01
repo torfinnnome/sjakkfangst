@@ -33,10 +33,9 @@ url_logger.propagate = False
 
 app = Flask(__name__)
 
-# Security headers applied to every response. CSP denies inline scripts/styles
-# (static files are served from /static) and all external origins.
+# Security headers applied to every response. CSP is handled by Cloudflare
+# to avoid conflicts with their inline scripts and beacon.
 SECURITY_HEADERS = {
-    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",

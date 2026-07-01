@@ -82,7 +82,6 @@ check_header() {
     fi
 }
 
-check_header "Content-Security-Policy"
 check_header "X-Content-Type-Options"
 check_header "X-Frame-Options"
 check_header "Referrer-Policy"
