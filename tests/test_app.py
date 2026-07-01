@@ -37,6 +37,7 @@ def fresh_limiter(monkeypatch):
 
 
 VALID_URL = "https://lichess.org/fide/1503014/Carlsen_Magnus"
+SAME_ORIGIN = {"Origin": "http://localhost"}
 
 
 def parse_sse_events(response):
@@ -60,25 +61,29 @@ class TestIndex:
 
 class TestFetchStreamValidation:
     def test_missing_url_returns_400(self, client, fresh_limiter):
-        r = client.get("/fetch_stream")
+        r = client.get("/fetch_stream", headers=SAME_ORIGIN)
         assert r.status_code == 400
 
     def test_empty_url_returns_400(self, client, fresh_limiter):
-        r = client.get("/fetch_stream?url=")
+        r = client.get("/fetch_stream?url=", headers=SAME_ORIGIN)
         assert r.status_code == 400
 
     def test_invalid_url_returns_400(self, client, fresh_limiter):
-        r = client.get("/fetch_stream?url=https://example.com/nope")
+        r = client.get("/fetch_stream?url=https://example.com/nope", headers=SAME_ORIGIN)
         assert r.status_code == 400
+
+    def test_cross_origin_blocked(self, client, fresh_limiter):
+        r = client.get(f"/fetch_stream?url={VALID_URL}", headers={"Origin": "https://evil.com"})
+        assert r.status_code == 403
 
 
 class TestRateLimiting:
     def test_rate_limit_event_when_per_ip_exceeded(self, client, fresh_limiter):
         # Exhaust the per-IP allowance
         for _ in range(MAX_REQUESTS_PER_IP):
-            client.get(f"/fetch_stream?url={VALID_URL}")
+            client.get(f"/fetch_stream?url={VALID_URL}", headers=SAME_ORIGIN)
 
-        r = client.get(f"/fetch_stream?url={VALID_URL}")
+        r = client.get(f"/fetch_stream?url={VALID_URL}", headers=SAME_ORIGIN)
         # Rate-limited responses are SSE so the client can show a countdown
         assert r.status_code == 200
         assert r.mimetype == "text/event-stream"
@@ -113,7 +118,7 @@ class TestFetchStreamHappyPath:
                           return_value={"stats": [], "player_name": "Carlsen, Magnus"}):
             # Consume the streaming response while patches are active; the SSE
             # generator is lazily evaluated when data is accessed.
-            r = client.get(f"/fetch_stream?url={VALID_URL}")
+            r = client.get(f"/fetch_stream?url={VALID_URL}", headers=SAME_ORIGIN)
             events = parse_sse_events(r)
             task_id = events[-1]["id"]
             dl = client.get(f"/download/{task_id}")
@@ -146,7 +151,7 @@ class TestFetchStreamHappyPath:
 
     def test_no_broadcasts_yields_error(self, client, temp_cache_dir, fresh_limiter):
         with patch.object(app_module, "get_broadcasts", return_value=[]):
-            r = client.get(f"/fetch_stream?url={VALID_URL}")
+            r = client.get(f"/fetch_stream?url={VALID_URL}", headers=SAME_ORIGIN)
             events = parse_sse_events(r)
         assert events and events[0]["error"] == "No broadcasts found"
 
@@ -157,7 +162,7 @@ class TestFetchStreamHappyPath:
              patch.object(app_module, "get_cached_tournament", return_value=None), \
              patch.object(app_module, "download_broadcast_pgn", return_value=""), \
              patch.object(app_module, "filter_games_by_fide", return_value=""):
-            r = client.get(f"/fetch_stream?url={VALID_URL}")
+            r = client.get(f"/fetch_stream?url={VALID_URL}", headers=SAME_ORIGIN)
             events = parse_sse_events(r)
         assert any(e.get("error") == "No matching games found" for e in events)
 

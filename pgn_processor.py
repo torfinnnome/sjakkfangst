@@ -558,6 +558,11 @@ def download_broadcast_pgn(broadcast_url: str) -> str:
             url_parts = broadcast_url.rstrip("/").split("/")
             tournament_id = url_parts[-1]
 
+        # Validate tournament_id before constructing an API URL (S5).
+        # Lichess IDs are alphanumeric with hyphens/underscores only.
+        if not re.match(r"^[A-Za-z0-9_-]+$", tournament_id):
+            return ""
+
         # Check cache first
         cached = get_cached_tournament(tournament_id)
         if cached is not None:

@@ -64,6 +64,19 @@ def _rate_limited_download(broadcast_url: str) -> str:
     return download_broadcast_pgn(broadcast_url)
 
 
+def _is_same_origin(header_value: str) -> bool:
+    """Check whether an Origin/Referer header matches this server's origin."""
+    if not header_value:
+        return False
+    host = request.host
+    return (
+        header_value == f"http://{host}"
+        or header_value == f"https://{host}"
+        or header_value.startswith(f"http://{host}/")
+        or header_value.startswith(f"https://{host}/")
+    )
+
+
 @app.route("/", methods=["GET"])
 def index():
     """Render the main form for entering FIDE player URL."""
@@ -73,6 +86,13 @@ def index():
 @app.route("/fetch_stream", methods=["GET"])
 def fetch_stream():
     """Stream progress of PGN fetching as Server-Sent Events."""
+    # Block cross-site requests (CSRF): /fetch_stream triggers scraping and
+    # disk writes, so require same-origin Origin or Referer (S6).
+    origin = request.headers.get("Origin") or ""
+    referer = request.headers.get("Referer") or ""
+    if not _is_same_origin(origin) and not _is_same_origin(referer):
+        return "Forbidden: cross-site requests not allowed", 403
+
     client_ip = request.remote_addr
     allowed, reason, wait = rate_limiter.check(client_ip)
     if not allowed:
