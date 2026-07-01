@@ -47,6 +47,7 @@ ENV CACHE_DIR=/cache \
 # Copy application code
 COPY --chown=appuser:appuser app.py scraper.py pgn_processor.py cache.py rate_limit.py ./
 COPY --chown=appuser:appuser templates/ ./templates/
+COPY --chown=appuser:appuser static/ ./static/
 
 # Switch to non-root user
 USER appuser

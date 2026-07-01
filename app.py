@@ -24,6 +24,23 @@ url_logger.propagate = False
 
 app = Flask(__name__)
 
+# Security headers applied to every response. CSP denies inline scripts/styles
+# (static files are served from /static) and all external origins.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+}
+
+
+@app.after_request
+def set_security_headers(response):
+    for key, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(key, value)
+    return response
+
 # Parallel download configuration (env-configurable)
 DOWNLOAD_WORKERS = int(os.environ.get("DOWNLOAD_WORKERS", "3"))
 LICHESS_MIN_SPACING = float(os.environ.get("LICHESS_MIN_SPACING", "2"))
