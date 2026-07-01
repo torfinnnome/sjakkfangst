@@ -12,6 +12,7 @@ from http_client import fetch_with_retry
 # Precompiled regexes (P6).
 _TOUR_ID_RE = re.compile(r'"tour":\{"id":"([^"]+)"')
 _TOURNAMENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+TREE_DEPTH = 6  # max plies from opening root
 
 # ECO code to opening name lookup (from Lichess chess-openings dataset, CC0).
 # Lazy-loaded on first access (P9) to reduce import time.
