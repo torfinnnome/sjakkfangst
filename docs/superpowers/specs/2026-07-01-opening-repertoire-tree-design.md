@@ -35,6 +35,12 @@ New function `build_opening_tree(pgn_text, fide_id)` returns a list of opening e
         "losses": 10,
         "whites": 20,
         "blacks": 22,
+        "white_wins": 12,
+        "white_draws": 4,
+        "white_losses": 4,
+        "black_wins": 12,
+        "black_draws": 4,
+        "black_losses": 6,
         "children": {
             "e4": {
                 "games": 42,
@@ -43,6 +49,12 @@ New function `build_opening_tree(pgn_text, fide_id)` returns a list of opening e
                 "losses": 10,
                 "whites": 20,
                 "blacks": 22,
+                "white_wins": 12,
+                "white_draws": 4,
+                "white_losses": 4,
+                "black_wins": 12,
+                "black_draws": 4,
+                "black_losses": 6,
                 "children": {
                     "e5": { ... },
                     "e6": { ... },
@@ -53,21 +65,21 @@ New function `build_opening_tree(pgn_text, fide_id)` returns a list of opening e
 }
 ```
 
-Each node tracks: `games`, `wins`, `draws`, `losses`, `whites`, `blacks`, `children` (dict of SAN move → child node).
+Each node tracks: `games`, `wins`, `draws`, `losses`, `whites`, `blacks`, `white_wins`, `white_draws`, `white_losses`, `black_wins`, `black_draws`, `black_losses`, `children` (dict of SAN move → child node). The per-color W/D/L breakdown enables color-split win rates in the frontend.
 
 ### Algorithm
 1. Parse filtered PGN (games matching the player's FIDE ID)
 2. For each game, extract SAN move list via `chess.pgn.Game.mainline_variations()`
 3. Group by `(opening, eco)` key (same as current `collect_opening_stats`)
 4. For each group, build nested tree by traversing moves 0..`TREE_DEPTH-1`
-5. At each node, accumulate `games/wins/draws/losses/whites/blacks`
+5. At each node, accumulate `games/wins/draws/losses/whites/blacks` and per-color breakdowns (`white_wins`, `white_draws`, `white_losses`, `black_wins`, `black_draws`, `black_losses`)
 6. Outcome determination: same logic as current stats (W/D/L based on `Result` header and player color)
-7. Children are sorted by `games` descending; top `TREE_TOP_N` marked `visible: true`, rest `visible: false`
+7. Children are returned sorted by `games` descending. The frontend applies the `TREE_TOP_N` visibility slicing (not the backend).
 
 ### Integration
-- `collect_opening_stats()` gains a `tree` key per opening entry
-- Called once on the combined filtered PGN at the end of the fetch flow (same as current behavior)
-- No change to existing stats fields or SSE event structure — only the `tree` key is added
+- Tree building is added to `collect_opening_stats()` — the function currently called by `app.py` on the combined filtered PGN
+- `filter_and_collect_stats()` does NOT build trees — it returns raw stats (dict keyed by `(opening, eco)`) used only in the cache-warm path where `collect_opening_stats` is called afterward anyway on the combined PGN
+- No change to existing stats fields or SSE event structure — only the `tree` key is added per opening entry
 
 ### Error Handling
 - Games shorter than `TREE_DEPTH` plies: tree stops at last move (no children)
@@ -115,7 +127,8 @@ Each opening row in the stats table gains a nested expandable section:
 - New function `renderTree(node, depth)` recursively builds nested `<ul>` elements
 - At each level, children sorted by `games` desc; first `TREE_TOP_N` rendered directly, rest wrapped in `<details class="tree-collapsed">`
 - Win rate calculated per-node: `round(wins/games * 100)`
-- Color-split win rates: `⬜: round(white_wins/white_games * 100)` and `⬛: round(black_wins/black_games * 100)`; shown as `-` when count is 0
+- Color-split win rates: `⬜: round(white_wins/whites * 100)` and `⬛: round(black_wins/blacks * 100)`; shown as `-` when denominator is 0
+- **Known limitation**: sorting the stats table destroys expanded `<details>` state. Acceptable for v1; can be fixed by preserving expansion state in a Set if needed later
 
 ### Styling
 - Nested `<ul>` with left border lines (CSS `border-left: 2px solid #ddd`)
@@ -124,10 +137,12 @@ Each opening row in the stats table gains a nested expandable section:
 - Consistent with existing table styling
 
 ## Testing
-- Unit test: `build_opening_tree` with sample PGN — verify tree structure, stats, depth limit, top-N collapse
+- Unit test: `build_opening_tree` with sample PGN — verify tree structure, stats, depth limit
+- Unit test: per-color W/D/L breakdown is correct at each node
 - Unit test: short games (fewer moves than `TREE_DEPTH`) — tree stops gracefully
 - Unit test: empty PGN — returns empty list
 - Unit test: single game — tree has one path
+- Unit test: `TREE_TOP_N + 1` children — verify exactly `TREE_TOP_N` visible, rest collapsed
 - Integration test: mock SSE response with tree data — verify frontend renders correctly
 
 ## Files Affected
@@ -138,6 +153,10 @@ Each opening row in the stats table gains a nested expandable section:
 | `static/style.css` | Tree node styling, nested list indentation, collapsed details styling |
 | `templates/index.html` | No changes (tree rendered inside existing table rows) |
 | `tests/test_pgn_processor.py` | Tests for `build_opening_tree` |
+
+## Notes
+- **Transpositions**: SAN moves are used as tree keys. Transpositions (same position, different move order) create separate branches. This is intentional — the tree shows what the player actually plays, not unique positions.
+- **Root node**: The tree root duplicates the parent opening entry's stats. Kept for symmetry (every node has the same fields), simplifies recursive rendering.
 
 ## Out of Scope
 - Interactive board showing moves (F4)
