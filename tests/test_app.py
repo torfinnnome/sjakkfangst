@@ -215,3 +215,39 @@ class TestSearchCache:
         cached = cache.get_cached_search("carlsen")
         assert cached is not None
         assert len(cached) == 1
+
+
+class TestSearchRateLimiter:
+    def test_allows_first_request(self):
+        from rate_limit import SearchRateLimiter
+        limiter = SearchRateLimiter()
+        allowed, _ = limiter.check("127.0.0.1")
+        assert allowed is True
+
+    def test_blocks_second_request_within_window(self):
+        from rate_limit import SearchRateLimiter
+        limiter = SearchRateLimiter()
+        limiter.check("127.0.0.1")
+        allowed, _ = limiter.check("127.0.0.1")
+        assert allowed is False
+
+    def test_allows_after_window_expires(self, monkeypatch):
+        import rate_limit
+        from rate_limit import SearchRateLimiter
+        from unittest.mock import MagicMock
+        import time
+        limiter = SearchRateLimiter()
+        limiter.check("127.0.0.1")
+        base_time = time.time()
+        mock_time = MagicMock()
+        mock_time.time = MagicMock(return_value=base_time + 6)
+        monkeypatch.setattr(rate_limit, "time", mock_time)
+        allowed, _ = limiter.check("127.0.0.1")
+        assert allowed is True
+
+    def test_different_ips_are_independent(self):
+        from rate_limit import SearchRateLimiter
+        limiter = SearchRateLimiter()
+        limiter.check("127.0.0.1")
+        allowed, _ = limiter.check("192.168.1.1")
+        assert allowed is True

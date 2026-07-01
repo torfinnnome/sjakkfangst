@@ -59,3 +59,49 @@ class RateLimiter:
 
 # Singleton
 rate_limiter = RateLimiter()
+
+
+SEARCH_MAX_REQUESTS = 1
+SEARCH_WINDOW_SECONDS = 5
+
+
+class SearchRateLimiter:
+    """Track search request timestamps and enforce per-IP rate limits.
+
+    Allows 1 search request per 5 seconds per IP address. Uses the same
+    sliding-window pattern as RateLimiter but with tighter limits since
+    each search triggers an external scrape.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._ip_times: dict[str, list[float]] = {}
+
+    def _prune(self, times: list[float], now: float) -> list[float]:
+        return [t for t in times if now - t < SEARCH_WINDOW_SECONDS]
+
+    def check(self, client_ip: str) -> Tuple[bool, float]:
+        """Check whether a search request from client_ip is allowed.
+
+        Returns:
+            (allowed, wait_seconds)
+            - allowed: True if request can proceed
+            - wait_seconds: 0 if allowed, or seconds until next slot opens
+        """
+        now = time.time()
+
+        with self._lock:
+            ip_times = self._ip_times.get(client_ip, [])
+            ip_times = self._prune(ip_times, now)
+            self._ip_times[client_ip] = ip_times
+
+            if len(ip_times) >= SEARCH_MAX_REQUESTS:
+                oldest = min(ip_times)
+                wait = SEARCH_WINDOW_SECONDS - (now - oldest)
+                return False, max(wait, 0)
+
+            ip_times.append(now)
+            return True, 0.0
+
+
+_search_limiter = SearchRateLimiter()
