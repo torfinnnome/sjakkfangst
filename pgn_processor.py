@@ -793,6 +793,144 @@ def collect_opening_stats(pgn_text, fide_id):
     return {"stats": result_list, "player_name": player_name or ""}
 
 
+def collect_opponent_stats(pgn_text, fide_id):
+    """Collect head-to-head statistics against each opponent for a given FIDE player.
+
+    Returns a dict with keys:
+        stats: list of dicts with keys:
+            opponent, opponent_fide_id, games, wins, draws, losses, win_pct,
+            avg_elo, date_from, date_to, top_openings
+        player_name: the player's proper name from PGN headers
+    Stats sorted by games descending.
+    """
+    if not pgn_text:
+        return {"stats": [], "player_name": ""}
+
+    stats = {}
+    stream = io.StringIO(pgn_text)
+    player_name = None
+
+    while True:
+        game = chess.pgn.read_game(stream)
+        if game is None:
+            break
+
+        headers = game.headers
+
+        white_fide = headers.get("WhiteFideId", "")
+        black_fide = headers.get("BlackFideId", "")
+
+        if white_fide != fide_id and black_fide != fide_id:
+            continue
+
+        if player_name is None:
+            player_name = headers.get("White" if white_fide == fide_id else "Black", "")
+
+        is_white = white_fide == fide_id
+        result = headers.get("Result", "*")
+
+        if is_white:
+            if result == "1-0":
+                outcome = "W"
+            elif result == "0-1":
+                outcome = "L"
+            elif result == "1/2-1/2":
+                outcome = "D"
+            else:
+                outcome = "D"
+        else:
+            if result == "0-1":
+                outcome = "W"
+            elif result == "1-0":
+                outcome = "L"
+            elif result == "1/2-1/2":
+                outcome = "D"
+            else:
+                outcome = "D"
+
+        opponent = headers.get("Black" if is_white else "White", "")
+        opponent_fide_id = headers.get("BlackFideId" if is_white else "WhiteFideId", "")
+
+        eco_code = headers.get("ECO", "")
+        lichess_opening = headers.get("Opening", "")
+        if lichess_opening:
+            opening = lichess_opening
+        elif eco_code:
+            opening = _get_eco_openings().get(eco_code, f"ECO {eco_code}")
+        else:
+            opening = "Unknown"
+
+        opponent_elo = None
+        try:
+            elo_str = headers.get("BlackElo" if is_white else "WhiteElo", "")
+            opponent_elo = int(elo_str) if elo_str and elo_str.isdigit() else None
+        except ValueError:
+            opponent_elo = None
+
+        date_str = headers.get("Date", "????.??.??")
+
+        key = opponent
+        if key not in stats:
+            stats[key] = {
+                "opponent": opponent,
+                "opponent_fide_id": opponent_fide_id,
+                "games": 0,
+                "wins": 0,
+                "draws": 0,
+                "losses": 0,
+                "elos": [],
+                "dates": [],
+                "openings": {},
+            }
+
+        entry = stats[key]
+        entry["games"] += 1
+        if outcome == "W":
+            entry["wins"] += 1
+        elif outcome == "D":
+            entry["draws"] += 1
+        else:
+            entry["losses"] += 1
+        if opponent_elo is not None:
+            entry["elos"].append(opponent_elo)
+        entry["dates"].append(date_str)
+        entry["openings"][opening] = entry["openings"].get(opening, 0) + 1
+
+    result_list = []
+    for entry in stats.values():
+        avg_elo = (
+            round(sum(entry["elos"]) / len(entry["elos"]))
+            if entry["elos"]
+            else None
+        )
+        win_pct = round(entry["wins"] / entry["games"] * 100) if entry["games"] else 0
+
+        top_openings = sorted(
+            [{"opening": k, "games": v} for k, v in entry["openings"].items()],
+            key=lambda x: x["games"],
+            reverse=True,
+        )
+
+        result_list.append(
+            {
+                "opponent": entry["opponent"],
+                "opponent_fide_id": entry["opponent_fide_id"],
+                "games": entry["games"],
+                "wins": entry["wins"],
+                "draws": entry["draws"],
+                "losses": entry["losses"],
+                "win_pct": win_pct,
+                "avg_elo": avg_elo,
+                "date_from": min(entry["dates"]) if entry["dates"] else "",
+                "date_to": max(entry["dates"]) if entry["dates"] else "",
+                "top_openings": top_openings,
+            }
+        )
+
+    result_list.sort(key=lambda x: x["games"], reverse=True)
+    return {"stats": result_list, "player_name": player_name or ""}
+
+
 def _make_tree_node():
     return {
         "games": 0, "wins": 0, "draws": 0, "losses": 0,
