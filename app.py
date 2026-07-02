@@ -14,7 +14,7 @@ from flask import Flask, request, send_file, Response, render_template, jsonify
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 
-from scraper import parse_fide_url, get_broadcasts, get_fide_rating
+from scraper import parse_fide_url, get_broadcasts, get_fide_ratings
 from pgn_processor import (
     download_broadcast_pgn,
     filter_games_by_fide,  # kept for test mocking compatibility
@@ -133,15 +133,15 @@ def fetch_stream():
             yield f"data: {json.dumps({'error': 'No broadcasts found'})}\n\n"
             return
 
-        # Fetch FIDE rating (check cache first, then fetch if needed)
-        fide_rating = get_cached_fide_rating(fide_id)
-        if fide_rating is None:
+        # Fetch FIDE ratings (check cache first, then fetch if needed)
+        fide_ratings = get_cached_fide_rating(fide_id)
+        if fide_ratings is None:
             try:
-                fide_rating = get_fide_rating(fide_id, player_name)
-                if fide_rating is not None:
-                    cache_fide_rating(fide_id, fide_rating)
+                fide_ratings = get_fide_ratings(fide_id, player_name)
+                if fide_ratings is not None:
+                    cache_fide_rating(fide_id, fide_ratings)
             except Exception:
-                pass  # Rating is optional, don't fail the fetch
+                pass  # Ratings are optional, don't fail the fetch
 
         all_games = []
         p_hits = 0
@@ -263,7 +263,7 @@ def fetch_stream():
 
         url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
                         url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
-        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': final_stats, 'player_name': player_name_resolved, 'fide_rating': fide_rating})}\n\n"
+        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': final_stats, 'player_name': player_name_resolved, 'fide_ratings': fide_ratings})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"

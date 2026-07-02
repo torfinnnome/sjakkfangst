@@ -167,7 +167,7 @@ form.onsubmit = function(e) {
 
             // Render opening stats
             if (data.stats && data.stats.length > 0) {
-                renderStats(data.stats, data.player_name || urlInput.value.split('/').pop(), data.fide_rating);
+                renderStats(data.stats, data.player_name || urlInput.value.split('/').pop(), data.fide_ratings);
             }
 
             // Mark all remaining items as done
@@ -212,7 +212,7 @@ form.onsubmit = function(e) {
     };
 };
 
-function renderStats(stats, playerName, fideRating) {
+function renderStats(stats, playerName, fideRatings) {
     currentStats = stats;
     statsSortCol = null;
     statsSortDir = 'desc';
@@ -224,8 +224,12 @@ function renderStats(stats, playerName, fideRating) {
     const winPct = Math.round(wins / total * 100);
 
     var heading = `Opening Statistics — ${decodeURIComponent(playerName)}`;
-    if (fideRating) {
-        heading += ` (FIDE ${fideRating})`;
+    if (fideRatings) {
+        var parts = [];
+        if (fideRatings.classical) parts.push("Classical " + fideRatings.classical);
+        if (fideRatings.rapid) parts.push("Rapid " + fideRatings.rapid);
+        if (fideRatings.blitz) parts.push("Blitz " + fideRatings.blitz);
+        if (parts.length) heading += " (FIDE " + parts.join(", ") + ")";
     }
     statsContainer.querySelector('summary').innerText = heading;
 

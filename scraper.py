@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from http_client import fetch_with_retry
 
 # Precompiled regex for extracting rating number from "Classical2823" format.
-_RATING_RE = re.compile(r"Classical(\d+)")
+_RATING_RE = re.compile(r"(Classical|Rapid|Blitz)(\d+)")
 
 # Maximum number of broadcasts to fetch per player (configurable via env var)
 MAX_BROADCASTS = int(os.environ.get("MAX_BROADCASTS", "100"))
@@ -52,15 +52,16 @@ def parse_fide_url(url: str) -> Dict[str, str]:
     return {"fide_id": fide_id, "player_name": player_name}
 
 
-def get_fide_rating(fide_id: str, player_name: str) -> Optional[int]:
-    """Fetch the player's current FIDE Classical rating from Lichess.
+def get_fide_ratings(fide_id: str, player_name: str) -> Optional[dict]:
+    """Fetch the player's current FIDE ratings from Lichess.
 
     Args:
         fide_id: The FIDE ID of the player (e.g., "1503014")
         player_name: The player name slug (e.g., "MagnusCarlsen")
 
     Returns:
-        The Classical FIDE rating as an integer, or None if not found.
+        Dict with 'classical', 'rapid', 'blitz' keys (int or None),
+        or None if the page can't be fetched.
     """
     url = f"https://lichess.org/fide/{fide_id}/{player_name}"
     try:
@@ -68,19 +69,15 @@ def get_fide_rating(fide_id: str, player_name: str) -> Optional[int]:
     except requests.RequestException:
         return None
     soup = BeautifulSoup(response.text, "html.parser")
-    standard = soup.select_one(".fide-player__rating__history--standard")
-    if not standard:
-        return None
-    parent = standard.find_parent(class_="fide-player__rating")
-    if not parent:
-        return None
-    text_el = parent.select_one(".fide-player__rating__text")
-    if not text_el:
-        return None
-    m = _RATING_RE.search(text_el.get_text(strip=True))
-    if not m:
-        return None
-    return int(m.group(1))
+    ratings = {"classical": None, "rapid": None, "blitz": None}
+    for text_el in soup.select(".fide-player__rating__text"):
+        m = _RATING_RE.search(text_el.get_text(strip=True))
+        if not m:
+            continue
+        kind = m.group(1).lower()
+        if kind in ratings:
+            ratings[kind] = int(m.group(2))
+    return ratings
 
 
 def _parse_page_broadcasts(soup) -> List[Dict[str, str]]:
