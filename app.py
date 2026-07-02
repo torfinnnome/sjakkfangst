@@ -19,6 +19,7 @@ from pgn_processor import (
     download_broadcast_pgn,
     filter_games_by_fide,  # kept for test mocking compatibility
     collect_opening_stats,
+    collect_opponent_stats,
 )
 from cache import (
     get_cached_player, cache_player, get_cached_tournament, cache_tournament,
@@ -261,9 +262,13 @@ def fetch_stream():
         final_stats = opening_result["stats"]
         player_name_resolved = opening_result.get("player_name", "")
 
+        # Collect per-opponent stats
+        opponent_result = collect_opponent_stats(combined_pgn, fide_id)
+        final_opponent_stats = opponent_result["stats"]
+
         url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
                         url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
-        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': final_stats, 'player_name': player_name_resolved, 'fide_ratings': fide_ratings})}\n\n"
+        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': final_stats, 'player_name': player_name_resolved, 'fide_ratings': fide_ratings, 'opponent_stats': final_opponent_stats})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
