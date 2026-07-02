@@ -11,6 +11,9 @@ from bs4 import BeautifulSoup
 
 from http_client import fetch_with_retry
 
+# Precompiled regex for extracting rating number from "Classical2823" format.
+_RATING_RE = re.compile(r"Classical(\d+)")
+
 # Maximum number of broadcasts to fetch per player (configurable via env var)
 MAX_BROADCASTS = int(os.environ.get("MAX_BROADCASTS", "100"))
 
@@ -47,6 +50,37 @@ def parse_fide_url(url: str) -> Dict[str, str]:
     player_name = match.group(2)
 
     return {"fide_id": fide_id, "player_name": player_name}
+
+
+def get_fide_rating(fide_id: str, player_name: str) -> Optional[int]:
+    """Fetch the player's current FIDE Classical rating from Lichess.
+
+    Args:
+        fide_id: The FIDE ID of the player (e.g., "1503014")
+        player_name: The player name slug (e.g., "MagnusCarlsen")
+
+    Returns:
+        The Classical FIDE rating as an integer, or None if not found.
+    """
+    url = f"https://lichess.org/fide/{fide_id}/{player_name}"
+    try:
+        response = fetch_with_retry(url, timeout=15)
+    except requests.RequestException:
+        return None
+    soup = BeautifulSoup(response.text, "html.parser")
+    standard = soup.select_one(".fide-player__rating__history--standard")
+    if not standard:
+        return None
+    parent = standard.find_parent(class_="fide-player__rating")
+    if not parent:
+        return None
+    text_el = parent.select_one(".fide-player__rating__text")
+    if not text_el:
+        return None
+    m = _RATING_RE.search(text_el.get_text(strip=True))
+    if not m:
+        return None
+    return int(m.group(1))
 
 
 def _parse_page_broadcasts(soup) -> List[Dict[str, str]]:

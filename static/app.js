@@ -167,7 +167,7 @@ form.onsubmit = function(e) {
 
             // Render opening stats
             if (data.stats && data.stats.length > 0) {
-                renderStats(data.stats, data.player_name || urlInput.value.split('/').pop());
+                renderStats(data.stats, data.player_name || urlInput.value.split('/').pop(), data.fide_rating);
             }
 
             // Mark all remaining items as done
@@ -212,7 +212,7 @@ form.onsubmit = function(e) {
     };
 };
 
-function renderStats(stats, playerName) {
+function renderStats(stats, playerName, fideRating) {
     currentStats = stats;
     statsSortCol = null;
     statsSortDir = 'desc';
@@ -223,7 +223,11 @@ function renderStats(stats, playerName) {
     const losses = stats.reduce((sum, s) => sum + s.losses, 0);
     const winPct = Math.round(wins / total * 100);
 
-    statsContainer.querySelector('summary').innerText = `Opening Statistics — ${decodeURIComponent(playerName)}`;
+    var heading = `Opening Statistics — ${decodeURIComponent(playerName)}`;
+    if (fideRating) {
+        heading += ` (FIDE ${fideRating})`;
+    }
+    statsContainer.querySelector('summary').innerText = heading;
 
     statsOverview.innerHTML =
         `<span>${total} games</span> ` +

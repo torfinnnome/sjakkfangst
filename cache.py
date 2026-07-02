@@ -18,6 +18,8 @@ CACHE_DIR = os.environ.get("CACHE_DIR", "/cache")
 CACHE_TTL_HOURS = int(os.environ.get("CACHE_TTL_HOURS", "1"))
 CACHE_COMPLETED_DAYS = int(os.environ.get("CACHE_COMPLETED_DAYS", "5"))
 TASK_TTL_HOURS = int(os.environ.get("TASK_TTL_HOURS", "1"))
+# FIDE ratings are published on the 1st of each month — cache for 30 days.
+FIDE_RATING_TTL_DAYS = 30
 
 # Precompiled date-header regex (P6).
 _DATE_RE = re.compile(r'\[Date "(\d{4})[.\-](\d{2})[.\-](\d{2})"\]')
@@ -384,3 +386,58 @@ def cache_search(query: str, results: list) -> None:
         _atomic_write(json_path, json.dumps(results))
     except (OSError, IOError) as e:
         logger.error(f"Failed to write search cache: {e}")
+
+
+def get_cached_fide_rating(fide_id: str) -> Optional[int]:
+    """Get cached FIDE rating for a player.
+
+    FIDE ratings are published on the 1st of each month, so they're cached
+    for FIDE_RATING_TTL_DAYS (default 30 days).
+
+    Args:
+        fide_id: The FIDE ID of the player.
+
+    Returns:
+        Cached rating as int if found and not expired, None otherwise.
+    """
+    hash_key = hashlib.md5(fide_id.encode()).hexdigest()[:16]
+    ratings_dir = Path(CACHE_DIR) / "ratings"
+    json_path = ratings_dir / f"{hash_key}.json"
+
+    if not json_path.exists():
+        return None
+
+    try:
+        data = json.loads(json_path.read_text())
+        cached_at = datetime.fromisoformat(data["cached_at"])
+        if cached_at.tzinfo is None:
+            cached_at = cached_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - cached_at > timedelta(days=FIDE_RATING_TTL_DAYS):
+            json_path.unlink(missing_ok=True)
+            return None
+        return data["rating"]
+    except (json.JSONDecodeError, IOError, KeyError):
+        json_path.unlink(missing_ok=True)
+        return None
+
+
+def cache_fide_rating(fide_id: str, rating: int) -> None:
+    """Cache FIDE rating for a player.
+
+    Args:
+        fide_id: The FIDE ID of the player.
+        rating: The Classical FIDE rating.
+    """
+    try:
+        hash_key = hashlib.md5(fide_id.encode()).hexdigest()[:16]
+        ratings_dir = Path(CACHE_DIR) / "ratings"
+        json_path = ratings_dir / f"{hash_key}.json"
+
+        ratings_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write(json_path, json.dumps({
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+            "fide_id": fide_id,
+            "rating": rating,
+        }))
+    except (OSError, IOError) as e:
+        logger.error(f"Failed to write FIDE rating cache: {e}")

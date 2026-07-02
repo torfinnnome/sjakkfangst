@@ -14,7 +14,7 @@ from flask import Flask, request, send_file, Response, render_template, jsonify
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 
-from scraper import parse_fide_url, get_broadcasts
+from scraper import parse_fide_url, get_broadcasts, get_fide_rating
 from pgn_processor import (
     download_broadcast_pgn,
     filter_games_by_fide,  # kept for test mocking compatibility
@@ -24,6 +24,7 @@ from cache import (
     get_cached_player, cache_player, get_cached_tournament, cache_tournament,
     _get_hash, _get_metadata_path, cache_task, get_cached_task,
     get_cached_search, cache_search,
+    get_cached_fide_rating, cache_fide_rating,
 )
 from rate_limit import rate_limiter, _search_limiter
 from http_client import fetch_with_retry
@@ -131,6 +132,16 @@ def fetch_stream():
         if not broadcasts:
             yield f"data: {json.dumps({'error': 'No broadcasts found'})}\n\n"
             return
+
+        # Fetch FIDE rating (check cache first, then fetch if needed)
+        fide_rating = get_cached_fide_rating(fide_id)
+        if fide_rating is None:
+            try:
+                fide_rating = get_fide_rating(fide_id, player_name)
+                if fide_rating is not None:
+                    cache_fide_rating(fide_id, fide_rating)
+            except Exception:
+                pass  # Rating is optional, don't fail the fetch
 
         all_games = []
         p_hits = 0
@@ -252,7 +263,7 @@ def fetch_stream():
 
         url_logger.info("%s  %s (%s)  %s tours  p=%s t=%s d=%s  = %s games",
                         url, player_name, fide_id, total, p_hits, t_hits, d_hits, len(all_games))
-        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': final_stats, 'player_name': player_name_resolved})}\n\n"
+        yield f"data: {json.dumps({'progress': 100, 'done': True, 'id': task_id, 'stats': final_stats, 'player_name': player_name_resolved, 'fide_rating': fide_rating})}\n\n"
 
     response = Response(generate(), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
