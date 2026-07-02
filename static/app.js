@@ -10,12 +10,18 @@ const tournamentDetails = document.getElementById('tournament-details');
 const statsContainer = document.getElementById('stats-container');
 const statsOverview = document.getElementById('stats-overview');
 const statsTableBody = document.querySelector('#stats-table tbody');
+const opponentStatsContainer = document.getElementById('opponent-stats-container');
+const opponentStatsOverview = document.getElementById('opponent-stats-overview');
+const opponentStatsTableBody = document.querySelector('#opponent-stats-table tbody');
 const downloadBtn = document.getElementById('download-btn');
 
 let currentEventSource = null;
 let currentStats = [];
 let statsSortCol = null;
 let statsSortDir = 'desc';
+let currentOpponentStats = [];
+let oppStatsSortCol = null;
+let oppStatsSortDir = 'desc';
 let rateLimitTimer = null;
 let retryCount = 0;
 let retryTimer = null;
@@ -170,6 +176,10 @@ form.onsubmit = function(e) {
                 renderStats(data.stats, data.player_name || urlInput.value.split('/').pop(), data.fide_ratings);
             }
 
+            if (data.opponent_stats && data.opponent_stats.length > 0) {
+                renderOpponentStats(data.opponent_stats);
+            }
+
             // Mark all remaining items as done
             const items = tournamentList.querySelectorAll('.tournament-item');
             items.forEach(item => {
@@ -245,6 +255,119 @@ function renderStats(stats, playerName, fideRatings) {
 
     statsContainer.style.display = 'block';
     statsContainer.open = true;
+}
+
+function renderOpponentStats(stats) {
+    currentOpponentStats = stats;
+    oppStatsSortCol = null;
+    oppStatsSortDir = 'desc';
+
+    const totalGames = stats.reduce((sum, s) => sum + s.games, 0);
+    const totalWins = stats.reduce((sum, s) => sum + s.wins, 0);
+    const totalDraws = stats.reduce((sum, s) => sum + s.draws, 0);
+    const totalLosses = stats.reduce((sum, s) => sum + s.losses, 0);
+    const winPct = totalGames > 0 ? Math.round(totalWins / totalGames * 100) : 0;
+    const uniqueOpponents = stats.length;
+
+    opponentStatsContainer.querySelector('summary').innerText =
+        `Head-to-Head Statistics (${uniqueOpponents} opponents)`;
+
+    opponentStatsOverview.innerHTML =
+        `<span>${totalGames} games</span> ` +
+        `<span class="win">W:${totalWins}</span> ` +
+        `<span class="draw">D:${totalDraws}</span> ` +
+        `<span class="loss">L:${totalLosses}</span> ` +
+        `<span>Win rate: ${winPct}%</span> ` +
+        `<span>${uniqueOpponents} opponents</span>`;
+
+    renderOpponentRows(currentOpponentStats);
+    wireOpponentSortHeaders();
+
+    opponentStatsContainer.style.display = 'block';
+    opponentStatsContainer.open = true;
+}
+
+function renderOpponentRows(data) {
+    opponentStatsTableBody.innerHTML = '';
+    data.forEach(s => {
+        const tr = document.createElement('tr');
+
+        let opponentCell;
+        if (s.opponent_fide_id) {
+            const link = `https://lichess.org/fide/${s.opponent_fide_id}/${encodeURIComponent(s.opponent)}`;
+            opponentCell = `<td><a href="${link}" target="_blank" rel="noopener">${escapeHtml(s.opponent)}</a></td>`;
+        } else {
+            opponentCell = `<td>${escapeHtml(s.opponent)}</td>`;
+        }
+
+        const topOpenings = (s.top_openings || []).slice(0, 3).map(o =>
+            `<span class="opening-tag" title="${escapeHtml(o.opening)} (${o.games} games)">${escapeHtml(o.opening)}</span>`
+        ).join('');
+
+        tr.innerHTML =
+            opponentCell +
+            `<td class="num">${s.games}</td>` +
+            `<td class="num win">${s.wins}</td>` +
+            `<td class="num draw">${s.draws}</td>` +
+            `<td class="num loss">${s.losses}</td>` +
+            `<td class="num">${s.win_pct}%</td>` +
+            `<td class="num">${s.avg_elo != null ? s.avg_elo : '-'}</td>` +
+            `<td class="openings-cell">${topOpenings}</td>`;
+        opponentStatsTableBody.appendChild(tr);
+    });
+}
+
+function wireOpponentSortHeaders() {
+    const headers = document.querySelectorAll('#opponent-stats-table thead th');
+    headers.forEach((th, colIndex) => {
+        th.onclick = () => sortOpponentStatsBy(colIndex);
+    });
+}
+
+function sortOpponentStatsBy(colIndex) {
+    const headers = document.querySelectorAll('#opponent-stats-table thead th');
+    const oppCols = [
+        { key: 'opponent', numeric: false },
+        { key: 'games', numeric: true },
+        { key: 'wins', numeric: true },
+        { key: 'draws', numeric: true },
+        { key: 'losses', numeric: true },
+        { key: 'win_pct', numeric: true },
+        { key: 'avg_elo', numeric: true },
+        { key: 'top_openings', numeric: false },
+    ];
+
+    if (oppStatsSortCol === colIndex) {
+        oppStatsSortDir = oppStatsSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        oppStatsSortCol = colIndex;
+        oppStatsSortDir = 'desc';
+    }
+
+    headers.forEach((th, i) => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        if (i === oppStatsSortCol) {
+            th.classList.add(oppStatsSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+    });
+
+    const col = oppCols[colIndex];
+    currentOpponentStats.sort((a, b) => {
+        let va = a[col.key];
+        let vb = b[col.key];
+        if (va == null) va = col.numeric ? -Infinity : '';
+        if (vb == null) vb = col.numeric ? -Infinity : '';
+        if (col.numeric) {
+            return oppStatsSortDir === 'asc' ? va - vb : vb - va;
+        }
+        va = String(va).toLowerCase();
+        vb = String(vb).toLowerCase();
+        if (va < vb) return oppStatsSortDir === 'asc' ? -1 : 1;
+        if (va > vb) return oppStatsSortDir === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    renderOpponentRows(currentOpponentStats);
 }
 
 const TREE_TOP_N = 5;
