@@ -65,4 +65,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Run Flask application via gunicorn (threaded workers support long-lived SSE
 # connections and the parallel download pool). Long timeout for big fetches.
 CMD ["gunicorn", "--workers", "2", "--threads", "8", "--timeout", "600", \
-     "--bind", "0.0.0.0:5000", "app:app"]
+     "--bind", "0.0.0.0:5000", "--pid", "/cache/gunicorn.pid", "app:app"]
