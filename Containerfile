@@ -18,9 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # --- Runtime Stage ---
 FROM python:3.12-alpine
 
-# Install runtime dependencies (wget for healthcheck)
-RUN apk add --no-cache wget
-
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -57,10 +54,6 @@ VOLUME ["/cache"]
 
 # Expose Flask port
 EXPOSE 5000
-
-# Health check using Flask's built-in server
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:5000/ || exit 1
 
 # Run Flask application via gunicorn (threaded workers support long-lived SSE
 # connections and the parallel download pool). Long timeout for big fetches.
