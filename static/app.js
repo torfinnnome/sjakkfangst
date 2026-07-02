@@ -87,6 +87,9 @@ form.onsubmit = function(e) {
     statsContainer.style.display = 'none';
     statsContainer.open = false;
     statsTableBody.innerHTML = '';
+    opponentStatsContainer.style.display = 'none';
+    opponentStatsContainer.open = false;
+    opponentStatsTableBody.innerHTML = '';
     downloadBtn.style.display = 'none';
 
     // Reset retry state
@@ -312,7 +315,7 @@ function renderOpponentRows(data) {
             `<td class="num loss">${s.losses}</td>` +
             `<td class="num">${s.win_pct}%</td>` +
             `<td class="num">${s.avg_elo != null ? s.avg_elo : '-'}</td>` +
-            `<td class="openings-cell">${topOpenings}</td>`;
+            `<td class="top-openings-cell">${topOpenings}</td>`;
         opponentStatsTableBody.appendChild(tr);
     });
 }
