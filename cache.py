@@ -18,8 +18,7 @@ CACHE_DIR = os.environ.get("CACHE_DIR", "/cache")
 CACHE_TTL_HOURS = int(os.environ.get("CACHE_TTL_HOURS", "1"))
 CACHE_COMPLETED_DAYS = int(os.environ.get("CACHE_COMPLETED_DAYS", "5"))
 TASK_TTL_HOURS = int(os.environ.get("TASK_TTL_HOURS", "1"))
-# FIDE ratings are published on the 1st of each month — cache for 30 days.
-FIDE_RATING_TTL_DAYS = 30
+# FIDE ratings are published on the 1st of each month.
 
 # Precompiled date-header regex (P6).
 _DATE_RE = re.compile(r'\[Date "(\d{4})[.\-](\d{2})[.\-](\d{2})"\]')
@@ -388,11 +387,24 @@ def cache_search(query: str, results: list) -> None:
         logger.error(f"Failed to write search cache: {e}")
 
 
+def _fide_rating_expiry(cached_at: datetime) -> datetime:
+    """Compute the expiry date for FIDE ratings: 1st of the next month.
+
+    If cached on July 15th, expires August 1st. If cached on December 1st,
+    expires January 1st.
+    """
+    month = cached_at.month
+    year = cached_at.year
+    if month == 12:
+        return datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    return datetime(year, month + 1, 1, tzinfo=timezone.utc)
+
+
 def get_cached_fide_rating(fide_id: str) -> Optional[dict]:
     """Get cached FIDE ratings for a player.
 
-    FIDE ratings are published on the 1st of each month, so they're cached
-    for FIDE_RATING_TTL_DAYS (default 30 days).
+    FIDE ratings are published on the 1st of each month, so they expire
+    on the 1st of the month after they were fetched.
 
     Args:
         fide_id: The FIDE ID of the player.
@@ -413,7 +425,7 @@ def get_cached_fide_rating(fide_id: str) -> Optional[dict]:
         cached_at = datetime.fromisoformat(data["cached_at"])
         if cached_at.tzinfo is None:
             cached_at = cached_at.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) - cached_at > timedelta(days=FIDE_RATING_TTL_DAYS):
+        if datetime.now(timezone.utc) >= _fide_rating_expiry(cached_at):
             json_path.unlink(missing_ok=True)
             return None
         return data["ratings"]
