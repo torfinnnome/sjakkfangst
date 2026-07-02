@@ -59,4 +59,4 @@ EXPOSE 5000
 # connections and the parallel download pool). Long timeout for big fetches.
 CMD ["gunicorn", "--workers", "2", "--threads", "8", "--timeout", "600", \
      "--bind", "0.0.0.0:5000", "--pid", "/cache/gunicorn.pid", \
-     "--control", "/cache/gunicorn_control.sock", "app:app"]
+     "--control-socket", "/cache/gunicorn.sock", "app:app"]
