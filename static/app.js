@@ -466,13 +466,13 @@ function handleSearchKeydown(e) {
     var items = searchResults.querySelectorAll('.search-result');
     if (!items.length) return;
 
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n')) {
         e.preventDefault();
         if (activeSearchIndex < items.length - 1) {
-            updateActiveSearchItem(activeSearchIndex + 1);
+            updateActiveSearchItem(Math.max(activeSearchIndex + 1, 0));
             items[activeSearchIndex].scrollIntoView({ block: 'nearest' });
         }
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p')) {
         e.preventDefault();
         if (activeSearchIndex > 0) {
             updateActiveSearchItem(activeSearchIndex - 1);
