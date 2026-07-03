@@ -304,7 +304,7 @@ function renderOpponentRows(data) {
         }
 
         const topOpenings = (s.top_openings || []).slice(0, 3).map(o =>
-            `<span class="opening-tag" title="${escapeHtml(o.opening)} (${o.games} games)">${escapeHtml(o.opening)}</span>`
+            `<a class="opening-tag" href="https://lichess.org/opening?q=${encodeURIComponent(o.opening)}" target="_blank" rel="noopener" title="${escapeHtml(o.opening)} (${o.games} games)">${escapeHtml(o.opening)}</a>`
         ).join('');
 
         tr.innerHTML =
