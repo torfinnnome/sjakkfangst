@@ -1,15 +1,34 @@
 """Tests for the PGN processor module."""
 
+import tempfile
 from unittest.mock import Mock, patch
 
+import pytest
+
+import cache
 from pgn_processor import download_broadcast_pgn, filter_games_by_fide, collect_opening_stats, build_opening_tree
+
+
+@pytest.fixture
+def temp_cache_dir():
+    """Redirect the disk cache to a temp dir so tests don't touch the host cache.
+
+    Without this, download_broadcast_pgn reads /cache (the production default)
+    and may return a stale tournament entry, skipping the second HTTP fetch
+    the test expects.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original = cache.CACHE_DIR
+        cache.CACHE_DIR = tmpdir
+        yield tmpdir
+        cache.CACHE_DIR = original
 
 
 class TestDownloadBroadcastPgn:
     """Tests for download_broadcast_pgn function."""
 
     @patch("http_client._session.get")
-    def test_valid_broadcast_url_returns_pgn_text(self, mock_get):
+    def test_valid_broadcast_url_returns_pgn_text(self, mock_get, temp_cache_dir):
         """Test that valid broadcast URL returns PGN text by extracting tournament ID."""
         # First call: fetch broadcast page
         mock_page_response = Mock()
