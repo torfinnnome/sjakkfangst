@@ -8,8 +8,10 @@ import re
 import sys
 import threading
 import time
+import unicodedata
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 from flask import Flask, request, send_file, Response, render_template, jsonify
 from bs4 import BeautifulSoup
 from urllib.parse import quote
@@ -293,27 +295,46 @@ def download(task_id):
     )
 
 
-def search_fide_players(query: str) -> list:
-    """Scrape Lichess FIDE directory for players matching the query.
+# Non-decomposing letters that Unicode NFKD leaves intact, mapped to their
+# ASCII equivalents. Covers Scandinavian/Germanic/Icelandic letters that show
+# up in European chess player names. Mapping follows the simple ASCII strip
+# Lichess appears to use for slugs (e.g. "Bø" → "Bo"), per empirical finding
+# that ø→o works on Lichess search. NFKD handles the rest (é→e, ö→o, å→a...).
+_MANUAL_FOLDS = {
+    "ø": "o", "Ø": "O",
+    "æ": "a", "Æ": "A",
+    "ð": "d", "Ð": "D",
+    "þ": "th", "Þ": "Th",
+    "ß": "ss", "ẞ": "SS",
+    "œ": "oe", "Œ": "OE",
+    "Ł": "L", "ł": "l",
+    "Đ": "D", "đ": "d",
+}
 
-    Args:
-        query: Player name search term.
 
-    Returns:
-        List of dicts with 'fide_id', 'name', 'slug' keys.
+def ascii_fold(s: str) -> str:
+    """Return an ASCII-only approximation of s for Lichess search fallback.
 
-    Raises:
-        requests.RequestException on network failures.
+    Strips diacritics via Unicode NFKD (handles é→e, ö→o, ü→u, ñ→n, å→a, etc.)
+    and replaces non-decomposing letters (ø, æ, ß, ...) using a small manual
+    table. Returns the input unchanged if it is already pure ASCII; non-ASCII
+    chars without a known mapping are dropped.
     """
-    url = f"https://lichess.org/fide?q={quote(query)}"
-    response = fetch_with_retry(url, timeout=15)
-    soup = BeautifulSoup(response.text, "html.parser")
+    if s.isascii():
+        return s
+    s = "".join(_MANUAL_FOLDS.get(c, c) for c in s)
+    s = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in s if ord(c) < 128)
 
-    results = []
+
+def _parse_fide_results(response) -> list:
+    """Parse a Lichess /fide?q=... HTML response into player dicts."""
+    soup = BeautifulSoup(response.text, "html.parser")
     table = soup.select_one(".fide-players-table")
     if not table:
-        return results
+        return []
 
+    results = []
     for link in table.select("a.player-intro__name[href]"):
         href = link["href"]
         match = re.match(r"^/fide/(\d+)/(\S+)$", href)
@@ -335,9 +356,54 @@ def search_fide_players(query: str) -> list:
             "name": name,
             "slug": slug,
         })
+    return results
 
-    query_lower = query.lower()
-    results = [r for r in results if query_lower in r["name"].lower() or query_lower in r["fide_id"]]
+
+def search_fide_players(query: str) -> list:
+    """Scrape Lichess FIDE directory for players matching the query.
+
+    If the query contains foldable non-ASCII characters, also searches an
+    ASCII-folded variant (e.g. "Bø" → "Bo") and merges results. This works
+    around Lichess's slug normalization, which strips diacritics (so a player
+    registered as "Børre" is found by searching "Bo" but not "Bø").
+
+    Args:
+        query: Player name search term.
+
+    Returns:
+        List of dicts with 'fide_id', 'name', 'slug' keys.
+
+    Raises:
+        requests.RequestException on network failures (only if every
+        variant fetch fails).
+    """
+    variants = [query]
+    folded = ascii_fold(query)
+    if folded != query:
+        variants.append(folded)
+
+    query_lowers = {v.lower() for v in variants}
+
+    results = []
+    last_exc = None
+    any_success = False
+    for variant in variants:
+        url = f"https://lichess.org/fide?q={quote(variant)}"
+        try:
+            response = fetch_with_retry(url, timeout=15)
+            results.extend(_parse_fide_results(response))
+            any_success = True
+        except requests.RequestException as exc:
+            last_exc = exc
+    if not any_success and last_exc is not None:
+        raise last_exc
+
+    # Keep results matching any variant (by name substring) or by FIDE ID.
+    results = [
+        r for r in results
+        if any(q in r["name"].lower() for q in query_lowers)
+        or any(q in r["fide_id"] for q in query_lowers)
+    ]
 
     # Deduplicate by FIDE ID (keep first occurrence), cap at 10
     seen = set()

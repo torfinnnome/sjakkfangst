@@ -4,6 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import unquote
 
 import pytest
 import requests as requests_lib
@@ -323,5 +324,162 @@ class TestSearchEndpoint:
 
         with patch("app.fetch_with_retry", side_effect=requests_lib.RequestException("fail")):
             r = client.get("/search?q=test")
+
+        assert r.status_code == 500
+
+
+def _resp(html: str) -> requests_lib.Response:
+    """Build a fake requests.Response carrying the given HTML body."""
+    r = requests_lib.Response()
+    r._content = html.encode()
+    r.status_code = 200
+    return r
+
+
+def _player_html(fide_id: str, slug: str, name: str) -> str:
+    return (
+        f'<div class="fide-players-table">'
+        f'<a href="/fide/{fide_id}/{slug}" class="player-intro__name">{name}</a>'
+        f'</div>'
+    )
+
+
+def _dispatch_by_query(responses):
+    """side_effect for fetch_with_retry that picks a response by the `q=` param.
+
+    `responses` maps the decoded query (e.g. "Bø") to a Response or an Exception.
+    """
+    def _side_effect(url, timeout=15):
+        q = unquote(url.split("q=", 1)[1])
+        outcome = responses[q]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+    return _side_effect
+
+
+class TestAsciiFold:
+    def test_pure_ascii_unchanged(self):
+        assert app_module.ascii_fold("Carlsen") == "Carlsen"
+        assert app_module.ascii_fold("1503014") == "1503014"
+        assert app_module.ascii_fold("") == ""
+
+    def test_manual_folds(self):
+        assert app_module.ascii_fold("Bø") == "Bo"
+        assert app_module.ascii_fold("Børre") == "Borre"
+        assert app_module.ascii_fold("Ærlig") == "Arlig"
+        assert app_module.ascii_fold("Straße") == "Strasse"
+        assert app_module.ascii_fold("Øster") == "Oster"
+        assert app_module.ascii_fold("cœur") == "coeur"
+
+    def test_nfkd_accents(self):
+        assert app_module.ascii_fold("José") == "Jose"
+        assert app_module.ascii_fold("Müller") == "Muller"
+        assert app_module.ascii_fold("Öster") == "Oster"
+        assert app_module.ascii_fold("Ñoño") == "Nono"
+        assert app_module.ascii_fold("Renée") == "Renee"
+        assert app_module.ascii_fold("Søraå") == "Soraa"  # ø manual + å via NFKD
+
+    def test_case_preserved(self):
+        assert app_module.ascii_fold("Ø") == "O"
+        assert app_module.ascii_fold("ø") == "o"
+        assert app_module.ascii_fold("Æ") == "A"
+        assert app_module.ascii_fold("ẞ") == "SS"
+
+
+class TestSearchVariants:
+    """search_fide_players searches ASCII-folded variants for non-ASCII queries."""
+
+    def _setup(self, monkeypatch):
+        monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
+
+    def test_ascii_query_single_fetch(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        self._setup(monkeypatch)
+        calls = []
+
+        def _side_effect(url, timeout=15):
+            calls.append(url)
+            return _resp(_player_html("1503014", "MagnusCarlsen", "Carlsen, Magnus"))
+
+        with patch("app.fetch_with_retry", side_effect=_side_effect):
+            r = client.get("/search?q=carl")
+
+        assert r.status_code == 200
+        assert len(calls) == 1, "pure-ASCII query should trigger exactly one fetch"
+        assert len(r.get_json()) == 1
+
+    def test_non_ascii_fetches_both_variants_and_merges(
+        self, client, temp_cache_dir, fresh_limiter, monkeypatch
+    ):
+        self._setup(monkeypatch)
+        responses = {
+            "Bø": _resp(_player_html("111", "BorreLars", "Børre, Lars")),
+            "Bo": _resp(_player_html("222", "BorreSven", "Borre, Sven")),
+        }
+        with patch("app.fetch_with_retry", side_effect=_dispatch_by_query(responses)):
+            r = client.get("/search?q=Bø")
+
+        data = r.get_json()
+        assert r.status_code == 200
+        fide_ids = sorted(p["fide_id"] for p in data)
+        assert fide_ids == ["111", "222"], "results from both variants should be merged"
+
+    def test_folded_only_results_are_kept(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        """The motivating bug: folded-variant results must survive the name filter.
+
+        Searching "Bø" returns a player via the "Bo" fetch whose name has no "ø"
+        (e.g. "Borre, Sven"). The old single-query filter would drop it; the new
+        any-variant filter must keep it.
+        """
+        self._setup(monkeypatch)
+        responses = {
+            "Bø": _resp('<div class="fide-players-table"></div>'),  # no matches
+            "Bo": _resp(_player_html("222", "BorreSven", "Borre, Sven")),
+        }
+        with patch("app.fetch_with_retry", side_effect=_dispatch_by_query(responses)):
+            r = client.get("/search?q=Bø")
+
+        data = r.get_json()
+        assert r.status_code == 200
+        assert len(data) == 1
+        assert data[0]["fide_id"] == "222"
+
+    def test_dedupes_across_variants(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        self._setup(monkeypatch)
+        same_player = _player_html("111", "BorreLars", "Børre, Lars")
+        responses = {"Bø": _resp(same_player), "Bo": _resp(same_player)}
+        with patch("app.fetch_with_retry", side_effect=_dispatch_by_query(responses)):
+            r = client.get("/search?q=Bø")
+
+        data = r.get_json()
+        assert r.status_code == 200
+        assert len(data) == 1, "same FIDE ID from both variants must be deduped"
+        assert data[0]["fide_id"] == "111"
+
+    def test_partial_failure_returns_successful_results(
+        self, client, temp_cache_dir, fresh_limiter, monkeypatch
+    ):
+        """If one variant fetch fails, the other's results are still returned (no 500)."""
+        self._setup(monkeypatch)
+        responses = {
+            "Bø": _resp(_player_html("111", "BorreLars", "Børre, Lars")),
+            "Bo": requests_lib.RequestException("folded fetch failed"),
+        }
+        with patch("app.fetch_with_retry", side_effect=_dispatch_by_query(responses)):
+            r = client.get("/search?q=Bø")
+
+        data = r.get_json()
+        assert r.status_code == 200
+        assert len(data) == 1
+        assert data[0]["fide_id"] == "111"
+
+    def test_all_variants_fail_returns_500(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        self._setup(monkeypatch)
+        responses = {
+            "Bø": requests_lib.RequestException("fail-1"),
+            "Bo": requests_lib.RequestException("fail-2"),
+        }
+        with patch("app.fetch_with_retry", side_effect=_dispatch_by_query(responses)):
+            r = client.get("/search?q=Bø")
 
         assert r.status_code == 500
