@@ -442,7 +442,12 @@ def search():
         logging.getLogger(__name__).exception("Search failed for query: %s", query)
         return jsonify({"error": "search failed"}), 500
 
-    cache_search(query, results)
+    # Cache non-empty results only. An empty result is not a stable player→FIDE
+    # mapping and may reflect a transient search limitation (e.g. diacritic
+    # folding); caching it permanently would block future fixes from taking
+    # effect for that query.
+    if results:
+        cache_search(query, results)
     return jsonify(results)
 
 

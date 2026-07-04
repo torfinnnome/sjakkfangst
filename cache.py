@@ -363,10 +363,20 @@ def get_cached_search(query: str) -> Optional[list]:
         return None
 
     try:
-        return json.loads(json_path.read_text())
+        cached = json.loads(json_path.read_text())
     except (json.JSONDecodeError, IOError):
         json_path.unlink(missing_ok=True)
         return None
+
+    # Treat a cached empty list as a miss and remove the stale file. Empty
+    # results are not a stable player→FIDE mapping — they can be artifacts of
+    # a search limitation (e.g. diacritic folding) that a later code change
+    # fixes. Re-running the search is cheap and correct; caching [] forever
+    # would block such fixes from ever taking effect for affected queries.
+    if cached == []:
+        json_path.unlink(missing_ok=True)
+        return None
+    return cached
 
 
 def cache_search(query: str, results: list) -> None:

@@ -221,6 +221,32 @@ class TestSearchCache:
         assert cached is not None
         assert len(cached) == 1
 
+    def test_cached_empty_list_treated_as_miss(self, temp_cache_dir):
+        """A cached [] is treated as a miss so stale empties self-heal.
+
+        Reproduces the møklebust-lien incident: a [] cached before the
+        ASCII-fold fix would block the fix forever. get_cached_search must
+        return None for [] so the route re-runs search_fide_players.
+        """
+        cache.cache_search("møklebust-lien", [])
+        assert cache.get_cached_search("møklebust-lien") is None
+        # The stale file should be removed so it can't accumulate.
+        from pathlib import Path
+        import hashlib
+        h = hashlib.md5("møklebust-lien".encode()).hexdigest()[:16]
+        assert not (Path(temp_cache_dir) / "search" / f"{h}.json").exists()
+
+    def test_empty_results_not_cached_by_route(self, client, temp_cache_dir, fresh_limiter, monkeypatch):
+        """The /search route must not cache empty results, so a future fix
+        (or a newly-registered player) isn't blocked by a stale [] entry."""
+        monkeypatch.setattr(app_module, "_search_limiter", rate_limit.SearchRateLimiter())
+        with patch("app.fetch_with_retry", return_value=_resp('<div class="fide-players-table"></div>')):
+            r = client.get("/search?q=zzznomatch")
+        assert r.status_code == 200
+        assert r.get_json() == []
+        # Empty result must not be written to the search cache.
+        assert cache.get_cached_search("zzznomatch") is None
+
 
 class TestSearchRateLimiter:
     def test_allows_first_request(self):
