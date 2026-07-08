@@ -105,6 +105,98 @@ Enable with Podman:
 SJAKKFANGST_LOG_URLS=1 ./run-rootless.sh
 ```
 
+### Systemd Service with Podman Quadlet
+
+Podman Quadlets are a simple, declarative way to define containers as systemd services. The Quadlet files are translated into proper systemd units automatically. This approach uses rootless podman — no sudo required.
+
+**1. Build the image:**
+
+```bash
+podman build -t sjakkfangst:latest -f Containerfile .
+```
+
+**2. Create the Quadlet directory:**
+
+```bash
+mkdir -p ~/.config/containers/systemd
+```
+
+**3. Create the container Quadlet:**
+
+```bash
+cat > ~/.config/containers/systemd/sjakkfangst.container << 'EOF'
+[Unit]
+Description=Sjakkfangst Chess Game Hunter
+After=network-online.target
+
+[Container]
+Image=localhost/sjakkfangst:latest
+PublishPort=127.0.0.1:5000:5000
+Volume=/path/to/sjakkfangst/cache:/cache:Z
+EnvironmentFile=/path/to/sjakkfangst/.env
+DropCapability=ALL
+NoNewPrivileges=true
+ReadOnly=true
+Tmpfs=/tmp:noexec,nosuid,size=100m
+Memory=512m
+UserNS=keep-id
+
+[Install]
+WantedBy=default.target
+EOF
+```
+
+Replace `/path/to/sjakkfangst` with the absolute path to your project directory (e.g., `/home/youruser/code/sjakkfangst`). The cache directory will be persisted on the host.
+
+Optionally create a `.env` file in your project directory for additional environment variables:
+
+```bash
+cat > /path/to/sjakkfangst/.env << 'EOF'
+CACHE_DIR=/cache
+CACHE_TTL_HOURS=1
+CACHE_COMPLETED_DAYS=5
+TASK_TTL_HOURS=1
+MAX_BROADCASTS=100
+DOWNLOAD_WORKERS=3
+LICHESS_MIN_SPACING=2
+RETRY_ATTEMPTS=3
+RETRY_DELAY=2
+SJAKKFANGST_LOG_URLS=1
+EOF
+```
+
+**4. Enable lingering (so it starts at boot, not just at login):**
+
+```bash
+loginctl enable-linger $USER
+```
+
+**5. Start the service:**
+
+```bash
+systemctl --user daemon-reexec
+systemctl --user start sjakkfangst.service
+```
+
+Note: The service name is `sjakkfangst.service` (not `sjakkfangst.container.service`). Generated Quadlet units cannot be `enable`d — the `[Install]` section in the Quadlet handles automatic starting.
+
+**6. Verify:**
+
+```bash
+systemctl --user status sjakkfangst.service
+```
+
+The container starts at boot and restarts on failure. The cache is persisted in the `./cache` directory. The application will be accessible at `http://localhost:5000`.
+
+**Manage the service:**
+
+```bash
+systemctl --user stop sjakkfangst.service
+systemctl --user start sjakkfangst.service
+systemctl --user restart sjakkfangst.service
+journalctl --user -u sjakkfangst.service -f
+```
+
 ## Usage (Direct)
 
 If not using Podman, run the app directly:
